@@ -1,0 +1,24 @@
+SIMULATEUR DE VOL EN LIGNE — CONTENU DU DOSSIER
+================================================
+
+server.js            Le serveur : il affiche le jeu et relie les joueurs entre eux.
+package.json         La fiche d'identité du projet (pour l'hébergeur).
+public/              Le jeu lui-même (page web + fichiers js).
+demarrer-windows.bat Pour essayer le jeu sur votre PC (il faut Node.js installé).
+
+ESSAI SUR VOTRE PC (facultatif)
+1. Installez Node.js (version "LTS") depuis https://nodejs.org
+2. Double-cliquez sur demarrer-windows.bat
+3. Le navigateur s'ouvre sur http://localhost:3000
+   (Pour arrêter : fermez la fenêtre noire.)
+
+MISE EN LIGNE (pour jouer avec tout le monde)
+Hébergeur conseillé : Render.com (offre gratuite « Web Service »).
+  - Langage / Runtime : Node
+  - Build Command      : npm install
+  - Start Command      : node server.js
+  - Instance Type      : Free
+Le site gratuit "s'endort" après environ 15 minutes sans joueur :
+la première ouverture suivante prend environ 1 minute, c'est normal.
+
+Adresse de contrôle : /sante  (affiche le nombre de joueurs connectés)

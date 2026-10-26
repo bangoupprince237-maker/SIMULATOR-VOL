@@ -1,0 +1,10 @@
+{
+  "name": "simulateur-vol-en-ligne",
+  "version": "1.0.0",
+  "description": "Simulateur de vol et de combat en 3D, jouable à plusieurs en ligne",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}

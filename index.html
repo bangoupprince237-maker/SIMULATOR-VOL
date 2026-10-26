@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Simulateur de vol et de combat en 3D, jouable à plusieurs en ligne.">
+<title>Vol Yaoundé–Douala</title>
+<style>[hidden]{display:none!important}html,body{margin:0;padding:0}</style>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&family=Saira+Condensed:wght@500;700&display=swap">
+<style>
+/* Layout: plein écran 3D ; avionique Airbus (couleurs ECAM) en surimpression ; panneau de commandes escamotable à droite (feuille basse sur mobile) */
+:root{
+  color-scheme:dark;
+  --bg:#04070b; --glass:rgba(8,13,20,.84); --glass2:rgba(16,24,34,.92); --line:rgba(130,165,200,.2);
+  --fg:#dbe6f0; --dim:#8094a6; --cyan:#3fd0ff; --green:#38e08a; --amber:#ffb21e; --magenta:#ff5ad9; --red:#ff4848; --white:#f4f8fb;
+  --font-ui:"B612",system-ui,sans-serif; --font-num:"B612 Mono",ui-monospace,monospace; --font-disp:"Saira Condensed","Arial Narrow",sans-serif;
+  --pw:min(360px,94vw);
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:13px}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button{font-family:var(--font-ui);font-size:12px;color:var(--fg);background:var(--glass2);border:1px solid var(--line);border-radius:4px;padding:7px 8px;cursor:pointer;line-height:1.1}
+button:hover{border-color:rgba(160,200,235,.5)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+button.on{color:#04110a;background:var(--green);border-color:var(--green);font-weight:700}
+button.amb.on{background:var(--amber);border-color:var(--amber);color:#160d00}
+button.cy.on{background:var(--cyan);border-color:var(--cyan);color:#021018}
+select{font-family:var(--font-ui);background:var(--glass2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px;width:100%}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+/* HUD */
+#pfd{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;pointer-events:none;z-index:5}
+.tape{background:var(--glass);border:1px solid var(--line);border-radius:4px;padding:6px 10px;min-width:92px;text-align:center}
+.tape .lbl{display:block;font-size:10px;letter-spacing:.12em;color:var(--dim)}
+.tape b{font-family:var(--font-num);font-size:22px;color:var(--green);font-variant-numeric:tabular-nums}
+.tape small{color:var(--dim);margin-left:3px}
+.tape i{display:block;font-style:normal;font-family:var(--font-num);font-size:11px;color:var(--cyan);min-height:14px}
+#adi{width:120px;height:120px;border-radius:50%;border:1px solid var(--line);background:#000}
+#fma{position:fixed;top:calc(148px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,minmax(58px,auto));background:var(--glass);border:1px solid var(--line);border-radius:4px;pointer-events:none;z-index:5;font-family:var(--font-num);font-size:11px}
+#fma div{padding:4px 8px;border-left:1px solid var(--line);text-align:center;color:var(--green);white-space:nowrap}
+#fma div:first-child{border-left:0}
+#fma .arm{color:var(--cyan)} #fma .off{color:var(--dim)}
+#ecam{position:fixed;top:calc(52px + env(safe-area-inset-top,0px));left:12px;background:var(--glass);border:1px solid var(--line);border-radius:4px;padding:8px 10px;z-index:5;pointer-events:none;font-family:var(--font-num);font-size:11px;line-height:1.55;min-width:150px}
+#ecam .k{color:var(--dim)} #ecam .g{color:var(--green)} #ecam .a{color:var(--amber)} #ecam .c{color:var(--cyan)} #ecam .r{color:var(--red)}
+#ils{position:fixed;right:12px;top:calc(56px + env(safe-area-inset-top,0px));z-index:5;width:250px;background:var(--glass);border:1px solid var(--magenta);border-radius:6px;padding:8px 10px;font-family:var(--font-num);font-size:11px;pointer-events:none}
+body.panel-open #ils{right:calc(var(--pw) + 12px)}
+.ilsHead{display:flex;justify-content:space-between;color:var(--magenta);margin-bottom:6px}
+.ilsRow{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:6px;margin:5px 0;color:var(--dim)}
+.bar.h{position:relative;height:14px;border-radius:3px;background:linear-gradient(90deg,transparent 0 10%,rgba(255,255,255,.25) 10% 10.8%,transparent 10.8% 30%,rgba(255,255,255,.25) 30% 30.8%,transparent 30.8% 69.2%,rgba(255,255,255,.25) 69.2% 70%,transparent 70% 89.2%,rgba(255,255,255,.25) 89.2% 90%,transparent 90%),#05090d}
+.bar .mk{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--amber)}
+.bar .dia{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;background:var(--magenta);transform:rotate(45deg);transition:left .15s}
+#ilsTxt{color:var(--white);font-family:var(--font-ui);font-size:12px;line-height:1.45;margin-top:4px}
+#ilsTxt b{color:var(--green)}
+@media (max-width:760px){#ils{top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));right:12px;width:180px} body.panel-open #ils{right:12px;bottom:calc(52% + 10px)}}
+#alert{position:fixed;top:calc(182px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:6;font-family:var(--font-disp);font-size:22px;letter-spacing:.08em;padding:4px 14px;border-radius:4px;pointer-events:none}
+#alert.warn{background:var(--red);color:#fff;animation:blink 1s steps(2) infinite}
+#alert.caut{background:var(--amber);color:#1a0f00}
+#alert.info{background:rgba(8,13,20,.8);color:var(--green);border:1px solid var(--green)}
+@keyframes blink{50%{opacity:.35}}
+#radio{position:fixed;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;width:min(560px,calc(100vw - 360px));background:var(--glass);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;line-height:1.45}
+body.panel-open #radio{left:calc(50% - var(--pw) / 2 + 160px)}
+#radio .rh{display:flex;gap:8px;align-items:center;font-family:var(--font-num);font-size:10px;color:var(--dim);letter-spacing:.1em}
+#radio .rh b{color:var(--cyan)} #radio .rh span{flex:1}
+#radio .rh button{padding:2px 6px;font-size:10px}
+#radioL div{padding-top:3px;border-top:1px solid rgba(130,165,200,.1);margin-top:3px}
+#radioL .s{font-family:var(--font-num);font-size:10px;letter-spacing:.06em;margin-right:6px;padding:1px 5px;border-radius:3px;background:#12324a;color:var(--cyan)}
+.brief{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:11.5px}.brief dt{color:var(--dim)}.brief dd{margin:0;text-align:right;font-family:var(--font-num);color:var(--white)}
+#radioL em{color:#9fc7e8;font-style:italic}
+#radioL .s.b{background:#3a2a10;color:var(--amber)}
+#radioL .s.v{background:#163a26;color:var(--green)} #radioL .tr{color:var(--dim)} #radioL .tr .s{background:#2a2f36;color:var(--dim)}
+@media (max-width:760px){#radio{width:calc(100vw - 230px);left:auto;right:12px;transform:none;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:10.5px} body.panel-open #radio{left:auto;bottom:calc(52% + 10px)}}
+#dispBtn{position:fixed;left:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9;font-family:var(--font-disp);font-size:14px;letter-spacing:.05em;padding:7px 11px;border-color:var(--cyan);color:var(--cyan)}
+#clearBtn{position:fixed;left:136px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9;font-family:var(--font-disp);font-size:14px;letter-spacing:.05em;padding:7px 11px;border-color:var(--green);color:var(--green)}
+#clearOff{display:none;position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:12;font-size:11px;padding:6px 10px;opacity:.55;background:rgba(8,13,20,.6)}
+#clearOff:hover,#clearOff:focus-visible{opacity:1}
+body.clear #panel,body.clear #togglePanel,body.clear #nd,body.clear #pfd,body.clear #fma,body.clear #ecam,body.clear #ils,body.clear #radio,body.clear #emerg,body.clear #toast,body.clear #dispBtn,body.clear #dispMenu,body.clear #clearBtn,body.clear #alert{display:none!important}
+body.clear #clearOff{display:block}
+.hideX{position:absolute;top:-9px;right:-9px;width:22px;height:22px;padding:0;border-radius:50%;font-size:11px;line-height:20px;text-align:center;background:var(--glass2);border:1px solid var(--line);color:var(--dim);pointer-events:auto;z-index:2}
+.hideX:hover{color:var(--red);border-color:var(--red)}
+#pfd,#ils,#radio,#emerg,#ecam{position:fixed}
+#pfd .hideX{top:-6px;right:-14px}
+#dispMenu{position:fixed;left:12px;top:calc(48px + env(safe-area-inset-top,0px));z-index:9;background:var(--glass2);border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+#dispMenu label{display:flex;gap:8px;align-items:center;cursor:pointer}
+#emerg{position:fixed;left:324px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:6;background:var(--glass);border:1px solid var(--red);border-radius:6px;padding:6px}
+#emerg .et{font-family:var(--font-disp);font-size:12px;letter-spacing:.08em;color:var(--red);text-align:center;margin-bottom:4px}
+#emPad{position:relative;width:150px;height:110px;border-radius:6px;background:radial-gradient(circle,#2a1214 0,#0d0708 75%);touch-action:none;cursor:grab;border:1px solid rgba(255,72,72,.35)}
+#emPad span{position:absolute;color:rgba(255,120,120,.6);font-size:12px}
+#emPad .l{left:6px;top:46px} #emPad .r{right:6px;top:46px} #emPad .u{left:70px;top:3px} #emPad .d{left:70px;bottom:3px}
+#emKnob{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff8a7a,#a3141c);border:2px solid #ffd0c8;box-shadow:0 2px 8px #000}
+@media (max-width:760px){#emerg{left:214px} #emPad{width:110px;height:84px} #emPad .u{left:50px} #emPad .d{left:50px} #emPad .l,#emPad .r{top:34px}}
+#warHud{position:fixed;top:236px;left:50%;transform:translateX(-50%);z-index:5;pointer-events:none;font-family:var(--font-num);font-size:13px;color:#b8ffb0;text-align:center;text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,.6);max-width:min(720px,calc(100vw - 32px))}
+#warHud .wl{background:rgba(0,20,0,.38);border:1px solid rgba(120,255,120,.25);border-radius:4px;padding:2px 8px;margin:2px 0}
+#warHud .lk{color:#ff5a4a;border-color:#ff5a4a;font-weight:700}#warHud .dim{opacity:.75}#warHud .warn{color:#ffd24a}
+#warHud .al{color:#fff;background:rgba(200,0,0,.75);border-color:#ff8080;font-weight:700;animation:blink .5s steps(2) infinite}
+body.clear #warHud{top:12px}
+#netLbls{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+#netLbls .nlbl{position:absolute;left:0;top:0;font:700 11px var(--font-num);color:#fff;background:rgba(10,40,90,.85);border:1px solid #7cc4ff;border-radius:3px;padding:1px 6px;white-space:nowrap;text-shadow:0 1px 1px #000}
+#netChat{position:fixed;left:12px;bottom:calc(200px + env(safe-area-inset-bottom,0px));z-index:6;max-width:min(420px,calc(100vw - 24px));background:var(--glass2);border:1px solid var(--line);border-radius:6px;padding:6px 26px 6px 10px;font-size:13px;line-height:1.35;pointer-events:auto;transition:opacity .6s}
+#netChat.fade{opacity:.35}
+#netChat:hover{opacity:1}
+#netList .np{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line)}
+#netList .np.me{color:#9fe0a8}
+#netList button.mini{padding:3px 8px;font-size:11px;flex:none}
+#netName,#netRoom,#netMsg{width:100%;box-sizing:border-box;background:rgba(0,0,0,.35);color:inherit;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font:inherit;font-size:13px}
+body.clear #netChat{display:none!important}
+#lbls{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+#lbls .lbl{position:absolute;left:0;top:0;font:700 11px var(--font-num);color:#fff;background:rgba(190,20,20,.82);border:1px solid #ff8a80;border-radius:3px;padding:1px 5px;white-space:nowrap;text-shadow:0 1px 1px #000}
+#footHud,#cross,#footBtns,#hurt{display:none}
+body.foot #footHud{display:block;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:5;font:13px var(--font-num);color:#e9ffe0;background:rgba(0,0,0,.45);border:1px solid rgba(160,255,140,.35);border-radius:6px;padding:4px 12px;text-align:center;pointer-events:none;max-width:calc(100vw - 32px)}
+body.foot #cross{display:block;position:fixed;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;z-index:5;pointer-events:none;background:radial-gradient(circle,#fff 0 2px,transparent 3px),linear-gradient(#fff,#fff) center/2px 8px no-repeat,linear-gradient(90deg,#fff,#fff) center/8px 2px no-repeat;opacity:.85;filter:drop-shadow(0 0 2px #000)}
+#scope{position:fixed;inset:0;z-index:4;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0 31vmin,#000 31.4vmin);}
+#scope::before,#scope::after{content:"";position:absolute;background:#000}
+#scope::before{left:50%;top:19vmin;bottom:19vmin;width:2px;margin-left:-1px}#scope::after{top:50%;left:calc(50% - 31vmin);right:calc(50% - 31vmin);height:2px;margin-top:-1px}
+body.foot #hurt{display:block;position:fixed;inset:0;z-index:4;pointer-events:none;background:radial-gradient(circle,transparent 45%,rgba(200,0,0,.9));opacity:0}
+body.foot #footBtns{display:flex;flex-wrap:wrap;gap:6px;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:6;max-width:260px;justify-content:flex-end}
+#footBtns button{font:700 12px var(--font-num);padding:10px 12px;border-radius:8px;background:rgba(10,20,10,.7);color:#e9ffe0;border:1px solid rgba(160,255,140,.5);touch-action:none}
+#footBtns button.on{background:rgba(40,120,40,.85)}
+#footBtns #fbFire{background:rgba(160,20,20,.8);border-color:#ff8a80;padding:16px 18px}
+body.truck #pfd,body.truck #fma,body.truck #ecam,body.truck #ils,body.truck #alert,body.truck #emerg,body.truck #cockpit{display:none!important}
+body.foot #pfd,body.foot #fma,body.foot #ecam,body.foot #ils,body.foot #alert,body.foot #emerg,body.foot #warHud,body.foot #cockpit{display:none!important}
+#squadList .sqr{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin:3px 0;font-size:12px}
+#squadList .sqr select{font-size:12px;padding:3px}#squadList .sqr button{font-size:11px;padding:4px 8px}
+#squadList .sqr.me span{color:var(--cyan);font-weight:700}#squadList .sqr.dead{opacity:.45}
+#rgScope{position:fixed;inset:0;z-index:4;pointer-events:none}
+#rgScope .rgc{position:absolute;left:50%;top:50%;width:2px;height:28%;margin-left:-1px;background:linear-gradient(#ffd24a,#ffd24a) top/2px 100% no-repeat;box-shadow:0 0 3px #000}
+#rgScope span{position:absolute;left:calc(50% + 10px);font:700 11px var(--font-num);color:#ffd24a;text-shadow:0 1px 2px #000}
+#rgScope span::before{content:"";position:absolute;left:-20px;top:50%;width:18px;height:2px;background:#ffd24a}
+#hitm{display:none;position:fixed;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;z-index:6;pointer-events:none;opacity:0;transition:opacity .15s}
+body.foot #hitm{display:block}
+#hitm::before,#hitm::after{content:"";position:absolute;left:50%;top:50%;width:30px;height:3px;margin:-1.5px 0 0 -15px;background:linear-gradient(90deg,currentColor 0 35%,transparent 35% 65%,currentColor 65%)}
+#hitm::before{transform:rotate(45deg)}#hitm::after{transform:rotate(-45deg)}
+#hitm.hit{color:#fff}#hitm.kill{color:#ff3b30}#hitm.on{opacity:1;transition:none}
+#lockBox{position:fixed;left:0;top:0;z-index:5;pointer-events:none;border:2px solid transparent;
+background:linear-gradient(#ff3b30,#ff3b30) 0 0/14px 3px no-repeat,linear-gradient(#ff3b30,#ff3b30) 0 0/3px 14px no-repeat,linear-gradient(#ff3b30,#ff3b30) 100% 0/14px 3px no-repeat,linear-gradient(#ff3b30,#ff3b30) 100% 0/3px 14px no-repeat,linear-gradient(#ff3b30,#ff3b30) 0 100%/14px 3px no-repeat,linear-gradient(#ff3b30,#ff3b30) 0 100%/3px 14px no-repeat,linear-gradient(#ff3b30,#ff3b30) 100% 100%/14px 3px no-repeat,linear-gradient(#ff3b30,#ff3b30) 100% 100%/3px 14px no-repeat;filter:drop-shadow(0 0 2px #000)}
+#lockBox i{position:absolute;left:0;top:-9px;height:4px;background:#ff3b30;border-radius:2px}
+#lockBox b{position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);font:700 11px var(--font-num);color:#ff6b60;white-space:nowrap;text-shadow:0 1px 2px #000}
+#fcard{position:fixed;right:12px;top:calc(182px + env(safe-area-inset-top,0px));z-index:5;width:346px;background:var(--glass);border:1px solid var(--cyan);border-radius:6px;padding:6px 10px 8px;font-family:var(--font-num);font-size:11.5px;color:var(--fg)}
+body.panel-open #fcard{right:calc(var(--pw) + 12px)}
+#fcard .fh{display:flex;align-items:center;gap:8px;margin-right:22px}#fcard .fh b{color:var(--cyan);letter-spacing:.06em;font-size:11px}#fcard .fh span{flex:1;color:var(--amber);font-size:10.5px;text-align:right}
+#fcMin{background:none;border:0;color:var(--fg);cursor:pointer;font-size:12px;padding:0 2px}
+#fcard dl{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;margin:6px 0 0}#fcard dt{opacity:.7}#fcard dd{margin:0;text-align:right}
+#fcard dd.ok{color:var(--green)}#fcard dd.bad{color:var(--red);font-weight:700}#fcard dd.warn{color:var(--amber)}
+#fcard .bar{grid-column:1/-1;height:5px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}#fcard .bar i{display:block;height:100%;background:var(--cyan)}
+#fcard.mini dl{display:none}
+body.card-on #ils{top:calc(182px + var(--fch, 250px) + 10px + env(safe-area-inset-top,0px))}
+body.clear #fcard,body.foot #fcard,body.truck #fcard{display:none}
+@media (max-width:760px){#fcard{width:230px;font-size:10.5px;top:calc(150px + env(safe-area-inset-top,0px))}}
+#toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:7;background:var(--glass2);border:1px solid var(--cyan);color:var(--white);padding:8px 14px;border-radius:4px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:80vw;text-align:center}
+#toast.show{opacity:1}
+
+/* Radar / ND */
+#nd{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));width:300px;z-index:5;background:var(--glass);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#nd header{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+#nd header strong{font-family:var(--font-disp);font-size:15px;letter-spacing:.06em;flex:1}
+#nd header button{padding:4px 7px;font-size:11px}
+#ndc{display:block;width:300px;height:300px;background:#000}
+#instr{padding:8px 10px;border-top:1px solid var(--line)}
+#instrPhase{font-family:var(--font-disp);font-size:13px;letter-spacing:.1em;color:var(--magenta);text-transform:uppercase}
+#instrText{font-size:12.5px;line-height:1.45;color:var(--white);margin-top:2px}
+#instrNext{font-size:11px;color:var(--cyan);margin-top:4px}
+#nd.mini #ndc,#nd.mini #ndBody{display:none}
+
+/* Panneau */
+#togglePanel{position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9;font-family:var(--font-disp);font-size:15px;letter-spacing:.05em;padding:8px 12px;background:var(--glass2);border-color:var(--cyan);color:var(--cyan)}
+#panel{position:fixed;top:0;right:0;bottom:0;width:var(--pw);z-index:8;background:var(--glass);backdrop-filter:blur(6px);border-left:1px solid var(--line);overflow-y:auto;padding:calc(56px + env(safe-area-inset-top,0px)) 14px calc(20px + env(safe-area-inset-bottom,0px));box-sizing:border-box;transition:transform .35s ease}
+#panel.hide{transform:translateX(105%)}
+#panel section{border-top:1px solid var(--line);padding-block:12px}
+#panel h3{margin:0 0 9px;font-family:var(--font-disp);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--white);display:flex;justify-content:space-between;align-items:baseline}
+#panel h3 span{font-family:var(--font-num);font-size:11px;color:var(--cyan);letter-spacing:0;text-transform:none;font-weight:400}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row>button{flex:1 1 0;min-width:0}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.lab{font-size:10.5px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin:8px 0 5px}
+.lab:first-child{margin-top:0}
+.ctrls{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+#thr{position:relative;width:62px;height:190px;background:linear-gradient(#0b1520,#070c12);border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:ns-resize}
+#thr .det{position:absolute;left:0;right:0;border-top:1px dashed rgba(130,165,200,.35);font-size:9px;font-family:var(--font-num);color:var(--dim);padding-left:3px}
+#thrHandle{position:absolute;left:6px;right:6px;height:22px;margin-top:-11px;border-radius:4px;background:linear-gradient(#d9e2ea,#8b98a5);box-shadow:0 2px 6px #000;color:#061018;font-family:var(--font-num);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#stick{position:relative;width:150px;height:150px;border:1px solid var(--line);border-radius:8px;background:radial-gradient(circle,#132232 0,#08111a 70%);touch-action:none;cursor:grab}
+#stick:before,#stick:after{content:"";position:absolute;background:rgba(130,165,200,.25)}
+#stick:before{left:50%;top:8px;bottom:8px;width:1px}
+#stick:after{top:50%;left:8px;right:8px;height:1px}
+#stickKnob{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;left:50%;top:50%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#556372,#1a222b);border:2px solid var(--cyan);z-index:1}
+.levers{display:grid;grid-template-columns:62px 62px 46px 52px;gap:10px;justify-content:start;align-items:start}
+.lev{display:flex;flex-direction:column;align-items:center;gap:4px}
+#lift,#flapLev{position:relative;height:190px;background:linear-gradient(#0b1520,#070c12);border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:ns-resize}
+#lift{width:62px;background:linear-gradient(rgba(56,224,138,.12),#070c12 50%,rgba(255,178,30,.1))}
+#flapLev{width:44px}
+#lift .det.mid{border-top-color:var(--green);color:var(--green)}
+#liftHandle,#flapHandle{position:absolute;left:5px;right:5px;height:22px;margin-top:-11px;border-radius:4px;box-shadow:0 2px 6px #000;font-family:var(--font-num);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#liftHandle{background:linear-gradient(#7cf0b4,#1f9c5c);color:#03130a}
+#liftHandle.off{background:linear-gradient(#5a6672,#2c343d);color:#c9d3dc}
+#flapHandle{background:linear-gradient(#bfe9ff,#3a8fb8);color:#021018}
+#flapLev .det{font-size:8px}
+#gearLev{position:relative;width:52px;height:190px;padding:0;background:linear-gradient(#0b1520,#070c12);border:1px solid var(--line);border-radius:6px}
+#gearLev span{position:absolute;left:0;right:0;font-family:var(--font-num);font-size:10px;color:var(--dim)}
+#gearLev .gU{top:6px} #gearLev .gD{bottom:6px}
+#gearKnob{position:absolute;left:50%;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;background:radial-gradient(circle,#2b333c 0 30%,#d9dee3 31% 52%,#2b333c 53% 70%,#9aa3ad 71%);box-shadow:0 2px 6px #000;transition:top .4s}
+#gearLev:before{content:"";position:absolute;left:50%;top:22px;bottom:22px;width:4px;margin-left:-2px;background:#26313c;border-radius:2px}
+#glA{width:40px}
+.wx.on{background:var(--cyan);border-color:var(--cyan);color:#021018}
+#wet{position:fixed;inset:0;pointer-events:none;z-index:1;width:100%;height:100%}
+button.mini{padding:3px 6px;font-size:10px}
+.hint{font-size:11px;color:var(--dim);line-height:1.4;margin-top:8px}
+.ctrls{grid-template-columns:150px 1fr}
+input[type=range]{width:100%;accent-color:var(--cyan)}
+.fcu{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.knob{background:var(--glass2);border:1px solid var(--line);border-radius:5px;padding:6px;display:grid;grid-template-columns:auto 1fr auto;gap:4px;align-items:center}
+.knob .t{grid-column:1/-1;font-size:10px;color:var(--dim);letter-spacing:.1em;display:flex;justify-content:space-between}
+.knob b{text-align:center;font-family:var(--font-num);font-size:16px;color:var(--cyan)}
+.knob button{padding:4px 9px}
+.gearl{display:flex;gap:6px;justify-content:center;margin-top:6px}
+.gearl i{width:22px;height:14px;border-radius:2px;border:1px solid var(--line);background:#111}
+.gearl i.dn{background:var(--green);border-color:var(--green)} .gearl i.tr{background:var(--red);border-color:var(--red)}
+#btnFull{width:100%;margin-top:8px;font-family:var(--font-disp);font-size:15px;letter-spacing:.06em;padding:10px;border-color:var(--magenta);color:var(--magenta)}
+#btnFull.on{background:var(--magenta);color:#1a0016}
+.keys{font-size:11px;color:var(--dim);line-height:1.7}
+.keys kbd{font-family:var(--font-num);color:var(--fg);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+label.chk{display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px}
+
+/* Cockpit & overlays */
+#cockpit{position:fixed;inset:0;pointer-events:none;z-index:2}
+#over{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+#over .box{background:var(--glass2);border:1px solid var(--line);border-radius:8px;padding:22px 24px;max-width:min(420px,88vw);text-align:center}
+#over h2{font-family:var(--font-disp);font-size:30px;margin:0 0 6px;letter-spacing:.05em}
+#over p{color:var(--fg);line-height:1.5;margin:0 0 14px}
+#boot{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:var(--font-disp);font-size:22px;letter-spacing:.1em;color:var(--cyan)}
+
+@media (max-width:760px){
+  #panel{top:auto;left:0;width:100%;height:52%;border-left:0;border-top:1px solid var(--line);padding-top:14px}
+  #panel.hide{transform:translateY(105%)}
+  #nd{width:190px} #ndc{width:190px;height:190px}
+  #instrText{font-size:11px}
+  #pfd{gap:4px} .tape{min-width:64px;padding:4px 6px} .tape b{font-size:16px} #adi{width:78px;height:78px}
+  #fma{top:calc(104px + env(safe-area-inset-top,0px));font-size:9px;grid-template-columns:repeat(5,auto)} #fma div{padding:3px 4px}
+  #alert{top:calc(130px + env(safe-area-inset-top,0px));font-size:16px}
+  #ecam{display:none}
+  body.panel-open #nd{bottom:calc(52% + 10px)}
+}
+@media (prefers-reduced-motion:reduce){#panel{transition:none}#alert.warn{animation:none}}
+</style>
+
+<canvas id="gl"></canvas>
+<canvas id="wet" hidden></canvas>
+
+<svg id="cockpit" viewBox="0 0 1000 600" preserveAspectRatio="none" hidden>
+  <path d="M0 600 L0 430 Q500 365 1000 430 L1000 600 Z" fill="#1a1f26"/>
+  <path d="M0 440 Q500 378 1000 440" stroke="#2b333d" stroke-width="10" fill="none"/>
+  <path d="M0 0 L0 600 L40 600 L95 120 L170 0 Z" fill="#13171c"/>
+  <path d="M1000 0 L1000 600 L960 600 L905 120 L830 0 Z" fill="#13171c"/>
+  <path d="M490 0 L510 0 L506 395 L494 395 Z" fill="#13171c"/>
+  <path d="M0 0 L1000 0 L1000 26 L0 26 Z" fill="#13171c"/>
+  <g fill="#0a0d11" stroke="#2b333d"><rect x="120" y="470" width="150" height="110" rx="6"/><rect x="290" y="470" width="150" height="110" rx="6"/><rect x="560" y="470" width="150" height="110" rx="6"/><rect x="730" y="470" width="150" height="110" rx="6"/></g>
+</svg>
+
+<div id="pfd">
+  <div class="tape"><span class="lbl">VITESSE</span><b id="hSpd">0</b><small>kt</small><i id="hSpdTgt"></i></div>
+  <canvas id="adi" width="200" height="200"></canvas>
+  <div class="tape"><span class="lbl">ALTITUDE</span><b id="hAlt">0</b><small>ft</small><i id="hVs"></i><i id="hAgl" style="color:var(--amber)"></i></div>
+  <div class="tape"><span class="lbl">CAP</span><b id="hHdg">000</b><small>°</small><i id="hHdgTgt"></i></div>
+</div>
+<div id="fma"><div id="fmaThr" class="off">MAN</div><div id="fmaVert" class="off">—</div><div id="fmaLat" class="off">—</div><div id="fmaAppr" class="off">—</div><div id="fmaEng" class="off">AP OFF</div></div>
+<div id="ils" hidden>
+  <div class="ilsHead"><b id="ilsT">ILS</b><span id="ilsD"></span></div>
+  <div class="ilsRow"><span>AXE</span><div class="bar h"><i class="mk"></i><i id="ilsLoc" class="dia"></i></div></div>
+  <div class="ilsRow"><span>PENTE</span><div class="bar h"><i class="mk"></i><i id="ilsGs" class="dia"></i></div></div>
+  <div id="ilsTxt"></div>
+</div>
+<div id="alert" hidden></div>
+<div id="ecam"></div>
+<div id="radio" aria-live="polite"><div class="rh"><b>RADIO</b><span id="radioF"></span><button id="radioMute" title="Couper la voix radio">voix</button></div><div id="radioL"></div></div>
+<div id="toast"></div>
+<div id="warHud" hidden></div>
+<div id="fcard" aria-live="off"><div class="fh"><b>FICHE DE VOL</b><span id="fcPh"></span><button id="fcMin" title="Réduire / agrandir" aria-label="Réduire ou agrandir la fiche">▾</button></div><dl id="fcBody"></dl></div>
+<div id="lbls" aria-hidden="true"></div>
+<div id="netLbls" aria-hidden="true"></div>
+<div id="netChat" hidden aria-live="polite"><div id="netChatBody"></div></div>
+<div id="footHud"></div><div id="cross" aria-hidden="true"></div><div id="hitm" aria-hidden="true"></div><div id="lockBox" hidden aria-hidden="true"><i></i><b></b></div><div id="scope" hidden aria-hidden="true"></div><div id="rgScope" hidden aria-hidden="true"><div class="rgc"></div><span style="top:52%">100</span><span style="top:56%">200</span><span style="top:61%">300</span><span style="top:67%">400</span><span style="top:74%">500 m</span></div><div id="hurt" aria-hidden="true"></div>
+<div id="footBtns"><button id="fbFire">TIRER</button><button id="fbLock">CADRER</button><button id="fbJump">SAUTER</button><button id="fbProne">À TERRE</button><button id="fbRun">COURIR</button><button id="fbAim">VISER</button><button id="fbCrouch">SE CACHER</button><button id="fbWpn">ARME</button><button id="fbOrder">ORDRE</button><button id="fbTake">SOLDAT</button><button id="fbCam">360°</button><button id="fbFace">DE FACE</button><button id="fbEnter">REMONTER</button></div>
+<button id="dispBtn" aria-expanded="false" aria-controls="dispMenu">Affichage ▾</button>
+<button id="clearBtn" title="Masquer tout ce qui gêne la vue (touche C)">Vue dégagée</button>
+<button id="clearOff" title="Réafficher l'interface (touche C)">Afficher l'interface</button>
+<div id="dispMenu" hidden>
+  <label><input type="checkbox" data-el="nd" checked> Radar / GPS et consignes</label>
+  <label><input type="checkbox" data-el="pfd" checked> Instruments de vol</label>
+  <label><input type="checkbox" data-el="ecam" checked> Écran moteurs (ECAM)</label>
+  <label><input type="checkbox" data-el="ils" checked> Cadre ILS</label>
+  <label><input type="checkbox" data-el="radio" checked> Radio</label>
+  <label><input type="checkbox" data-el="emerg" checked> Levier de secours</label>
+  <label><input type="checkbox" data-el="card" checked> Fiche de vol (croisière, vitesses d'atterrissage)</label>
+  <label><input type="checkbox" data-el="netnames" checked> Noms des autres joueurs</label>
+  <label><input type="checkbox" data-el="netchat" checked> Discussion en ligne</label>
+  <label><input type="checkbox" id="autoClear" checked> Vue dégagée automatique dans le cockpit</label>
+  <button id="dispAll">Tout masquer</button>
+</div>
+<div id="emerg"><div class="et">LEVIER DE SECOURS · 4 6 8 2</div><div id="emPad"><span class="l">◀</span><span class="r">▶</span><span class="u">▲</span><span class="d">▼</span><div id="emKnob"></div></div></div>
+
+<div id="nd">
+  <header><strong id="ndTitle">RADAR · ROSE</strong>
+    <button id="ndMode" title="Changer le mode du radar">PLAN</button>
+    <button id="ndRngDn" title="Réduire l'échelle">−</button><span id="ndRng" class="num">40</span><button id="ndRngUp" title="Agrandir l'échelle">+</button>
+    <button id="ndMin" title="Réduire le radar">▾</button></header>
+  <canvas id="ndc" width="600" height="600"></canvas>
+  <div id="instr"><div id="instrPhase">Préparation</div><div id="ndBody"><div id="instrText">Chargement…</div><div id="instrNext"></div></div></div>
+</div>
+
+<button id="togglePanel" aria-controls="panel" aria-expanded="true">Masquer les commandes</button>
+
+<aside id="panel">
+  <section style="border-top:0">
+    <h3>Vol <span id="routeInfo"></span></h3>
+    <div class="grid3" style="grid-template-columns:1fr 1fr">
+      <div><div class="lab">Départ</div><select id="dep"></select></div>
+      <div><div class="lab">Destination</div><select id="dest"></select></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="btnReset">Aligner en bout de piste</button><button id="btnPark">Garer au poste</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnBoard" class="cy">EMBARQUER LES PASSAGERS AU POSTE</button><button id="btnSkipBoard" hidden>Fermer les portes</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnAutoTaxi">Roulage automatique jusqu'à la piste (I)</button></div>
+    <label class="chk"><input type="checkbox" id="gateStart" checked> Chaque vol commence au poste : embarquement des passagers, repoussage par le tracteur, puis vous roulez vous-même (ou touche I)</label>
+    <div class="lab">Accélération du temps</div>
+    <div class="row" id="taccRow"><button class="tacc on" data-x="1">×1</button><button class="tacc" data-x="2">×2</button><button class="tacc" data-x="4">×4</button><button class="tacc" data-x="8">×8</button><button class="tacc" data-x="16">×16</button><button class="tacc" data-x="32">×32</button></div>
+  </section>
+
+  <section>
+    <h3>Instructions de vol <span>FR · EN</span></h3>
+    <dl class="brief" id="briefT"></dl>
+    <div class="row" style="margin-top:6px"><button id="btnBriefDep">Briefing départ</button><button id="btnBriefApp">Briefing atterrissage</button></div>
+    <div class="lab">Langue de la radio</div>
+    <select id="radioLang"><option value="both" selected>Français puis anglais</option><option value="fr">Français</option><option value="en">Anglais</option></select>
+  </section>
+
+  <section>
+    <h3>Changer d'avion <span id="acInfo"></span></h3>
+    <div class="lab">Prendre les commandes d'un autre avion</div>
+    <select id="acList" aria-label="Avions autour de vous"></select>
+    <div class="row" style="margin-top:6px"><button id="btnTake" class="cy">PRENDRE LES COMMANDES</button><button id="btnNearest">LE PLUS PROCHE</button></div>
+    <div class="lab">Votre avion</div>
+    <div class="grid3" style="grid-template-columns:1fr 1fr">
+      <select id="myLiv" aria-label="Compagnie">
+        <option value="sanaga">Air Sanaga</option><option value="mungo">Air Mungo (Cameroun)</option><option value="kivu">Kivu Airways (Rwanda)</option><option value="sablon">Sablon Air (Belgique)</option>
+        <option value="essai">Essais Constructeur</option><option value="sahel">Sahel Air</option><option value="kribi">Kribi Express</option><option value="seine">Seine Airways</option><option value="lagune">Lagune Air (Côte d'Ivoire)</option><option value="atlas">Atlantic Star (États-Unis)</option><option value="prive">Jet privé noir et or</option><option value="armee">Armée de l'air (gris militaire)</option>
+      </select>
+      <select id="myType" aria-label="Type d'avion">
+        <optgroup label="Avions de ligne"><option value="A319">Court (A319)</option><option value="A320" selected>Moyen (A320)</option><option value="A321">Long (A321)</option><option value="gros">Gros porteur biréacteur</option><option value="jumbo">Jumbo 4 réacteurs (type 747)</option><option value="super">Super-jumbo double pont (type A380)</option></optgroup>
+        <optgroup label="Autres"><option value="jet">Jet privé</option><option value="militaire">Avion militaire (transport)</option><option value="chasseur">Chasseur Rafale</option></optgroup>
+        <optgroup label="Hélicoptères"><option value="heli-armee">Hélicoptère militaire</option><option value="heli-attaque">Hélicoptère d'attaque</option><option value="heli-samu">Hélicoptère SAMU</option><option value="heli-police">Hélicoptère police</option></optgroup>
+      </select>
+    </div>
+  </section>
+
+  <section>
+    <h3>En ligne · multijoueur <span id="netInfo">solo</span></h3>
+    <p id="netStatus" class="hint" style="font-size:12px;margin:0 0 6px">Connexion…</p>
+    <div class="grid3" style="grid-template-columns:1fr 1fr">
+      <div><div class="lab">Votre nom de pilote</div><input id="netName" type="text" maxlength="16" autocomplete="off"></div>
+      <div><div class="lab">Salon privé (facultatif)</div><input id="netRoom" type="text" maxlength="40" placeholder="ex. escadrille7" autocomplete="off"></div>
+    </div>
+    <div class="row" style="margin-top:6px"><button id="netNameOk">Changer mon nom</button><button id="netRoomGo" class="cy">ENTRER DANS LE SALON</button><button id="netRoomOut">Salon public</button></div>
+    <label class="chk"><input type="checkbox" id="netPvp"> Combat entre joueurs (Rafale contre Rafale : vos missiles peuvent viser les joueurs qui ont aussi coché cette case ⚔)</label>
+    <div class="lab">Joueurs connectés <span id="netCount"></span></div>
+    <div id="netList"></div>
+    <div class="lab">Discussion</div>
+    <div class="row"><input id="netMsg" type="text" maxlength="140" placeholder="Écrivez un message puis Entrée" autocomplete="off" style="flex:1"><button id="netSend">Envoyer</button></div>
+    <p class="hint" style="font-size:12px;opacity:.8;margin:6px 0 0">Tous ceux qui ouvrent cette page en même temps volent dans le même ciel : vous voyez leurs avions, hélicoptères ou soldats en direct, avec leur nom au-dessus. « Le rejoindre » vous place juste à côté d'un joueur. Un salon privé réunit seulement ceux qui tapent le même nom de salon.</p>
+  </section>
+
+  <section>
+    <h3>Combat · Rafale <span id="warInfo">exercice</span></h3>
+    <div class="grid3" style="grid-template-columns:1fr 1fr">
+      <div><div class="lab">Taille de vos Rafale</div><select id="rafSize"><option value="petit">Petit (plus agile)</option><option value="moyen" selected>Moyen</option><option value="grand">Grand</option><option value="geant">Géant</option></select></div>
+      <div><div class="lab">Missiles à bord</div><select id="ammoN"><option value="6">6</option><option value="12">12</option><option value="24">24</option><option value="50" selected>50</option></select></div>
+      <div><div class="lab">Peinture</div><select id="rafPaint"><option value="gris" selected>Gris tactique</option><option value="desert">Camouflage désert</option><option value="noir">Noir furtif</option></select></div>
+      <div><div class="lab">Rafale alliés</div><select id="wingN"><option value="0">Aucun</option><option value="2">2 ailiers</option><option value="3" selected>3 ailiers</option><option value="4">4 ailiers</option><option value="5">5 ailiers</option></select></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="btnRafale" class="cy">PILOTER LE RAFALE</button><button id="btnFront">ALLER AU FRONT (en vol)</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnStrip">ATTERRIR À LA BASE AVANCÉE</button><button id="btnFire" class="amb">TIRER UN MISSILE (Entrée)</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnFlares">LEURRES (Retour ←)</button><button id="btnTgt">CIBLE SUIVANTE (Y)</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnTruck" class="amb">JOUER L'ENNEMI : CAMION LANCE-MISSILES</button><button id="btnTruckStop">Quitter le camion</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnZone">Réinitialiser la zone</button></div>
+    <p class="hint" style="font-size:12px;opacity:.8;margin:6px 0 0">Zone de combat loin des aéroports (scénario d'exercice fictif). Les losanges et étiquettes rouges montrent les ennemis. Mode ennemi : vous conduisez un camion radar qui tire tout seul (A = auto/manuel, Entrée = tir) sur un raid de 6 Rafale.</p>
+  </section>
+
+  <section>
+    <h3>Troupes au sol <span>à pied</span></h3>
+    <div class="grid3" style="grid-template-columns:1fr 1fr">
+      <div><div class="lab">Unité</div><select id="unitSel"><option value="mil" selected>Unité militaire</option><option value="agent">Agents en costume noir</option><option value="veste">Hommes en veste (pistolets)</option><option value="bir">Intervention rapide (tout en noir)</option></select></div>
+      <div><div class="lab">Escouade</div><select id="squadN"><option value="4">4 hommes</option><option value="6" selected>6 hommes</option><option value="8">8 hommes</option></select></div>
+      <div><div class="lab">Votre arme</div><select id="wpnSel"><option value="revolver">Revolver</option><option value="pistolet">Pistolet</option><option value="magnum">Magnum</option><option value="carabine" selected>Carabine</option><option value="sniper">Fusil de précision (militaires)</option><option value="roquette">Lance-roquettes (militaires)</option><option value="lourd">Pistolet lourd .50</option><option value="dore">Pistolet doré</option><option value="smg">Mitraillette tactique</option><option value="micro">Mitraillette compacte</option></select></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="btnExit" class="cy">SORTIR DU RAFALE (E)</button><button id="btnEnter">REMONTER (E)</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnOrder">ORDRE À L'ESCOUADE (F)</button><button id="btnFoes">Ennemis au sol : réinitialiser</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnTakeNext">PRENDRE LE SOLDAT SUIVANT (T)</button><button id="btnTakeCmd">REVENIR AU CHEF (G)</button></div>
+    <div class="lab">Escouade : arme de chaque homme</div>
+    <div id="squadList"></div>
+    <p class="hint" style="font-size:12px;opacity:.8;margin:6px 0 0">Posez le Rafale et arrêtez-le, puis sortez. Z/↑ avancer · S reculer · Q/D pas de côté · ← → tourner (ou glisser la souris) · Maj courir · Espace tirer · V viser (lunette au fusil, viseur gradué au lance-roquettes) · C se cacher · R recharger · 1 revolver · 2 magnum · 3 carabine · 4 fusil · 5 pistolet · 6 lance-roquettes · T prendre le soldat suivant · G revenir au chef · Y changer l'arme du coéquipier le plus proche · F ordres · E remonter · L ou clic droit maintenu : cadrer un ennemi · clic gauche : tirer · Tab cible suivante · Maj sprint · J sauter · P à terre (en courant : plongeon) · 7 pistolet lourd · 8 pistolet doré · 9 mitraillette tactique · 0 mitraillette compacte · O caméra 360° / épaule · K vue de face (glissez la souris pour tourner autour, molette pour zoomer).</p>
+  </section>
+
+  <section>
+    <h3>Atterrissage <span id="landInfo"></span></h3>
+    <button id="btnLandCfg" style="width:100%;font-family:var(--font-disp);font-size:14px;letter-spacing:.04em;border-color:var(--green);color:var(--green)">CONFIGURATION ATTERRISSAGE (K)</button>
+    <div class="grid3" style="grid-template-columns:1fr 1fr;margin-top:6px"><button id="btnAutoLand" class="cy">ATTERRISSAGE AUTO (X)</button><button id="btnLandAid" class="on">AIDE ARRONDI + AXE</button></div>
+    <div class="lab">Frein constant <span id="brkLvlO" class="num" style="color:var(--cyan)">60 %</span></div>
+    <div class="row"><button id="btnBrakeConst" class="amb">FREIN CONSTANT (J)</button><input type="range" id="brakeLvl" min="0.2" max="1" step="0.05" value="0.6" aria-label="Force du frein constant" style="flex:1 1 120px"></div>
+    <div class="keys" style="margin-top:8px">1. À 30 km du seuil : <b>Configuration atterrissage</b> (train, volets, aérofreins armés, freins).<br>2. Suivez le cadre <b>ILS</b> : losanges au centre, V/S cible, 138 kt.<br>3. Sous 50 ft, l'<b>aide à l'arrondi</b> lève le nez et coupe les gaz.<br>4. Au sol : inverseurs, frein constant et maintien de l'axe automatiques.</div>
+  </section>
+
+  <section>
+    <h3>Pilote automatique <span id="apInfo">FCU</span></h3>
+    <div class="fcu">
+      <div class="knob"><div class="t">VITESSE <span id="spdMode">kt</span></div><button id="spdDn">−</button><b id="spdVal">250</b><button id="spdUp">+</button></div>
+      <div class="knob"><div class="t">CAP <span>°</span></div><button id="hdgDn">−</button><b id="hdgVal">007</b><button id="hdgUp">+</button></div>
+      <div class="knob"><div class="t">ALTITUDE <span>ft</span></div><button id="altDn">−</button><b id="altVal">20000</b><button id="altUp">+</button></div>
+      <div class="knob"><div class="t">VITESSE VERT. <span>ft/min</span></div><button id="vsDn">−</button><b id="vsVal">+1800</b><button id="vsUp">+</button></div>
+    </div>
+    <div class="grid4" style="margin-top:6px"><button id="btnAP" class="cy">AP 1</button><button id="btnATHR" class="cy">A/THR</button><button id="btnNAV" class="cy">NAV</button><button id="btnAPPR" class="cy">APPR</button></div>
+    <div class="grid3" style="margin-top:6px"><button id="btnHDG" class="cy">CAP SÉL.</button><button id="btnVS" class="cy">V/S</button><button id="btnALT" class="cy">ALT HOLD</button></div>
+    <button id="btnFull">VOL AUTOMATIQUE COMPLET</button>
+    <label class="chk"><input type="checkbox" id="chkAssist" checked> Le pilote auto gère aussi le train et les volets</label>
+  </section>
+
+  <section>
+    <h3>Poussée &amp; manche <span id="thrInfo">N1 —</span></h3>
+    <div class="levers">
+      <div class="lev"><div class="lab">Gaz</div><div id="thr"><div id="thrHandle">IDLE</div></div></div>
+      <div class="lev"><div class="lab">Montée</div>
+        <div id="lift"><div class="det" style="top:0">+15°</div><div class="det mid" style="top:50%">PALIER</div><div class="det" style="top:calc(100% - 13px)">−10°</div><div id="liftHandle">OFF</div></div>
+        <button id="liftOff" class="mini">Libérer</button></div>
+      <div class="lev"><div class="lab">Volets</div><div id="flapLev"><div id="flapHandle">0</div></div></div>
+      <div class="lev"><div class="lab">Train</div><button id="gearLev" aria-label="Sortir ou rentrer le train"><span class="gU">UP</span><i id="gearKnob"></i><span class="gD">DOWN</span></button><div class="gearl" style="margin-top:2px"><i id="glA" class="dn"></i></div></div>
+    </div>
+    <div class="hint">Levier <b>MONTÉE</b> vers le haut : l'avion se soulève et monte. Au milieu : vol en palier. Vers le bas : descente.</div>
+    <div class="lab">Mini-manche et palonnier</div>
+    <div class="ctrls">
+      <div id="stick"><div id="stickKnob"></div></div>
+      <div><input type="range" id="rudder" min="-1" max="1" step="0.01" value="0" aria-label="Palonnier"><div class="hint">Palonnier : gauche / droite au sol et en vol</div></div>
+    </div>
+    <div class="grid4" style="margin-top:8px"><button id="thrIdle">IDLE</button><button id="thrCl">CL</button><button id="thrFlx">FLX</button><button id="thrToga">TOGA</button></div>
+    <div class="grid3" style="margin-top:6px"><button id="btnRev" class="amb">INVERSEURS</button><button id="eng1" class="on">MOTEUR 1</button><button id="eng2" class="on">MOTEUR 2</button></div>
+    <button id="btnSens" class="amb" style="width:100%;margin-top:6px;font-family:var(--font-disp);font-size:14px;letter-spacing:.05em">DIRECTION TRÈS SENSIBLE (Maj+D)</button>
+    <button id="btnTurbo" class="amb" style="width:100%;margin-top:6px;font-family:var(--font-disp);font-size:14px;letter-spacing:.05em">HYPERVITESSE (O)</button>
+    <div class="lab">Assiette (trim de tangage) <span class="num" id="trimVal" style="color:var(--cyan)">0.0°</span></div>
+    <div class="row"><button id="trimDn">Piquer ▼</button><button id="trimZero">Neutre</button><button id="trimUp">Cabrer ▲</button></div>
+  </section>
+
+  <section>
+    <h3>Volets, train, aérofreins</h3>
+    <div class="lab">Volets <span id="flapInd" class="num" style="color:var(--cyan)">0</span></div>
+    <div class="row" id="flapRow"><button class="flap on" data-f="0">0</button><button class="flap" data-f="1">1+F</button><button class="flap" data-f="2">2</button><button class="flap" data-f="3">3</button><button class="flap" data-f="4">FULL</button></div>
+    <div class="lab">Train d'atterrissage</div>
+    <div class="row"><button id="btnGear" class="on">TRAIN SORTI · rentrer</button></div>
+    <div class="gearl"><i id="gl0" class="dn"></i><i id="gl1" class="dn"></i><i id="gl2" class="dn"></i></div>
+    <div class="lab">Aérofreins (spoilers)</div>
+    <div class="row"><button class="spd on" data-s="0">RENTRÉS</button><button class="spd" data-s="0.5">½</button><button class="spd" data-s="1">PLEINS</button><button id="btnSpdArm" class="cy on">ARM</button></div>
+    <div class="lab">Freins</div>
+    <div class="row"><button id="btnPBrk" class="amb">FREIN DE PARC</button><button id="btnBrake">FREINER (maintenir)</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnEBrake" style="background:#8a1414;color:#fff;border-color:#ff6b60;font-weight:700">FREIN D'URGENCE (Maj+B, maintenir)</button></div>
+    <div class="row" style="margin-top:6px"><button class="abrk" data-a="0">AUTO OFF</button><button class="abrk" data-a="1">LO</button><button class="abrk on" data-a="2">MED</button><button class="abrk" data-a="3">MAX</button></div>
+  </section>
+
+  <section>
+    <h3>Lumières</h3>
+    <div class="grid4">
+      <button class="lt" data-l="landing">PHARES ATT.</button><button class="lt" data-l="taxi">TAXI</button><button class="lt on" data-l="nav">NAV</button><button class="lt" data-l="strobe">STROBES</button>
+      <button class="lt on" data-l="beacon">BEACON</button><button class="lt" data-l="logo">LOGO</button><button class="lt" data-l="wing">AILE</button><button class="lt on" data-l="cabin">CABINE</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Ciel &amp; heure <span id="todVal">09:00</span></h3>
+    <input type="range" id="tod" min="0" max="24" step="0.05" value="9" aria-label="Heure de la journée">
+    <div class="row" style="margin-top:6px"><button class="todp" data-h="6.1">Aube</button><button class="todp" data-h="9">Matin</button><button class="todp" data-h="13">Midi</button><button class="todp" data-h="18.2">Coucher</button><button class="todp" data-h="22">Nuit</button></div>
+    <div class="lab">Météo</div>
+    <div class="row"><button class="wx on" data-w="0">Beau temps</button><button class="wx" data-w="1">Nuageux</button><button class="wx" data-w="2">Pluie</button><button class="wx" data-w="3">Orage</button></div>
+    <div class="lab">Nuages (cumulus)</div>
+    <div class="row"><button class="cld" data-c="0">Aucun</button><button class="cld" data-c="1">Épars</button><button class="cld on" data-c="2">Fragmentés</button><button class="cld" data-c="3">Denses</button></div>
+    <div class="lab">Relief des montagnes</div>
+    <div class="row"><button class="rel" data-r="1">Réel</button><button class="rel on" data-r="1.5">Accentué</button><button class="rel" data-r="2.5">Spectaculaire</button><button id="btnPeaks" class="on">NOMS DES SOMMETS</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnBirds" class="on">OISEAUX</button><button id="btnSound">SON MOTEURS</button></div>
+  </section>
+
+  <section>
+    <h3>Vues caméra <span id="viewName">Poursuite</span></h3>
+    <div class="grid3" id="viewGrid"></div>
+    <div class="keys" style="margin-top:6px">Glisser sur l'écran pour tourner autour de l'avion, molette ou pincement pour zoomer.</div>
+  </section>
+
+  <section>
+    <h3>Clavier</h3>
+    <div class="keys">
+      <b>Avion</b> · <kbd>↑</kbd><kbd>↓</kbd> piquer / cabrer (↓ = rotation au décollage) · <kbd>←</kbd><kbd>→</kbd> virer en vol, diriger la roue avant au sol<br>
+      <kbd>Q</kbd> / <kbd>D</kbd> (ou <kbd>E</kbd>) palonnier gauche / droite · <kbd>W</kbd> ou <kbd>Z</kbd> / <kbd>S</kbd> levier MONTÉE<br>
+      <kbd>+</kbd> ou <kbd>=</kbd> / <kbd>−</kbd> poussée · <kbd>T</kbd> pleine poussée (TOGA) · <kbd>R</kbd> inverseurs · <kbd>B</kbd> freins (maintenir) · <kbd>Maj+B</kbd> FREIN D'URGENCE · <kbd>P</kbd> frein de parc<br>
+      <kbd>F</kbd> / <kbd>Maj+F</kbd> volets · <kbd>G</kbd> train · <kbd>Espace</kbd> aérofreins · <kbd>I</kbd> roulage automatique<br>
+      <kbd>K</kbd> config. atterrissage · <kbd>X</kbd> atterrissage auto · <kbd>J</kbd> frein constant · <kbd>A</kbd> pilote auto · <kbd>Maj+A</kbd> vol auto complet<br>
+      <kbd>O</kbd> hypervitesse · <kbd>Maj+D</kbd> direction très sensible · <kbd>4</kbd><kbd>6</kbd><kbd>8</kbd><kbd>2</kbd> levier de secours (gauche, droite, monter, descendre)<br>
+      <b>Rafale</b> · <kbd>Entrée</kbd> tirer un missile · <kbd>Y</kbd> cible suivante · <kbd>Retour ←</kbd> leurres · <kbd>W</kbd>/<kbd>S</kbd> montée / descente rapides (jusqu'à ±50°)<br>
+      <b>À pied</b> · <kbd>E</kbd> sortir / remonter · <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> marcher · <kbd>Maj</kbd> courir · <kbd>Espace</kbd> tirer · <kbd>V</kbd> viser · <kbd>C</kbd> se cacher · <kbd>R</kbd> recharger · <kbd>1</kbd>–<kbd>6</kbd> armes (5 pistolet, 6 lance-roquettes) · <kbd>T</kbd> prendre un autre soldat · <kbd>G</kbd> revenir au chef · <kbd>Y</kbd> arme du coéquipier · <kbd>F</kbd> ordres · <kbd>O</kbd> caméra 360° · <kbd>K</kbd> vue de face · <kbd>L</kbd> / clic droit cadrer l'ennemi · clic gauche tirer · <kbd>Tab</kbd> cible suivante · <kbd>Maj</kbd> sprint · <kbd>J</kbd> sauter · <kbd>P</kbd> à terre / plongeon · <kbd>7</kbd>–<kbd>0</kbd> pistolet lourd, doré, mitraillettes<br>
+      <b>Camion ennemi</b> · <kbd>Z</kbd>/<kbd>S</kbd> avancer/reculer · <kbd>Q</kbd>/<kbd>D</kbd> tourner · <kbd>A</kbd> tir auto · <kbd>Entrée</kbd> tirer · <kbd>Y</kbd> cible suivante<br>
+      <b>Hélicoptère</b> · <kbd>W</kbd>/<kbd>Z</kbd> monter (maintenir) · <kbd>S</kbd> descendre · relâcher = stationnaire · <kbd>↑</kbd> avancer · <kbd>↓</kbd> freiner/reculer · <kbd>←</kbd><kbd>→</kbd> tourner · <kbd>Q</kbd>/<kbd>D</kbd> pivoter<br>
+      <b>Affichage</b> · <kbd>H</kbd> masquer / afficher les commandes · <kbd>C</kbd> vue dégagée · <kbd>U</kbd> radar · <kbd>V</kbd> vue suivante · <kbd>L</kbd> phares · <kbd>N</kbd> jour/nuit · <kbd>M</kbd> météo<br>
+      Changer d'avion : uniquement avec les boutons « Prendre les commandes » du panneau (aucune touche ne change d'avion).
+    </div>
+  </section>
+</aside>
+
+<div id="over" hidden><div class="box"><h2 id="overTitle">Crash</h2><p id="overText"></p><button id="overBtn" class="cy on">Recommencer au départ</button></div></div>
+<div id="boot">Préparation de l'aéroport…</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/world.js"></script>
+<script src="js/airport.js"></script>
+<script src="js/aircraft.js"></script>
+<script src="js/cockpit.js"></script>
+<script src="js/nature.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/life.js"></script>
+<script src="js/boom.js"></script>
+<script src="js/atc.js"></script>
+<script src="js/war.js"></script>
+<script src="js/troops.js"></script>
+<script src="js/netws.js"></script>
+<script src="js/net.js"></script>
+<script src="js/view.js"></script>
+<script src="js/ui.js"></script>
+
+</body>
+</html>
