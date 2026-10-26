@@ -4,7 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
-const PUB = path.join(__dirname, 'public');
+const ROOT = __dirname, PUB = path.join(__dirname, 'public');
 const MAX_MSG = 9000, MAX_PER_ROOM = 80, MAX_ROOMS_PER_CLIENT = 16;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8' };
 
@@ -13,13 +13,20 @@ const server = http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/sante') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok ' + clients.size + ' joueur(s)'); }
   if (p.endsWith('/')) p += 'index.html';
-  const file = path.normalize(path.join(PUB, p));
-  if (!file.startsWith(PUB + path.sep)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Page introuvable'); }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
-  });
+  // on cherche le fichier dans public/, puis à la racine (si GitHub a aplati les dossiers)
+  const base = path.basename(p), tries = [path.join(PUB, p), path.join(ROOT, p), path.join(PUB, base), path.join(ROOT, base), path.join(PUB, 'js', base), path.join(ROOT, 'js', base)];
+  const ext = path.extname(base).toLowerCase();
+  if (!TYPES[ext]) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Page introuvable'); }
+  (function next(i) {
+    if (i >= tries.length) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Page introuvable : ' + p); }
+    const file = path.normalize(tries[i]);
+    if (!file.startsWith(ROOT + path.sep) || base === 'server.js') return next(i + 1);
+    fs.readFile(file, (err, data) => {
+      if (err) return next(i + 1);
+      res.writeHead(200, { 'Content-Type': TYPES[ext], 'Cache-Control': 'no-cache' });
+      res.end(data);
+    });
+  })(0);
 });
 
 // ---------- WebSocket minimal (texte seulement) ----------
