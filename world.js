@@ -8,7 +8,10 @@ window.SIM = window.SIM || {};
     toLL(x, z) { return { lat: LAT0 - z / MLAT, lon: LON0 + x / (MLAT * COS0) }; },
     bearing(x1, z1, x2, z2) { let b = Math.atan2(x2 - x1, -(z2 - z1)) * R2D; return (b + 360) % 360; },
   };
-  SIM.geo = geo; SIM.D2R = D2R; SIM.R2D = R2D;
+  SIM.geo = geo;
+  // repère local d'une ville : z le long du boulevard (de a vers b = −z… +z), x en travers
+  SIM.cityL = (c, x, z) => { const dx = x - c.x, dz = z - c.z; return { x: dx * c.cr + dz * c.sr, z: -dx * c.sr + dz * c.cr }; };
+  SIM.cityW = (c, lx, lz) => ({ x: c.x + lx * c.cr - lz * c.sr, z: c.z + lx * c.sr + lz * c.cr }); SIM.D2R = D2R; SIM.R2D = R2D;
 
   // Aéroports (coordonnées et altitudes réelles ; pistes simplifiées)
   const AIRPORTS = [
@@ -18,6 +21,9 @@ window.SIM = window.SIM || {};
     { id: 'CDG', icao: 'LFPG', name: 'Paris-Charles de Gaulle', city: 'Paris', lat: 49.0097, lon: 2.5479, elev: 119, hdg: 85, len: 4200, wid: 45, ids: ['08', '26'], gulls: false },
     { id: 'ABJ', icao: 'DIAP', name: 'Abidjan Félix-Houphouët-Boigny', city: 'Abidjan', lat: 5.2614, lon: -3.9263, elev: 6, hdg: 28, len: 3000, wid: 45, ids: ['03', '21'], gulls: true, twin: false },
     { id: 'JFK', icao: 'KJFK', name: 'New York John F. Kennedy', city: 'New York', lat: 40.6413, lon: -73.7781, elev: 4, hdg: 31, len: 3682, wid: 61, ids: ['04', '22'], gulls: true },
+    { id: 'BRU', icao: 'EBBR', name: 'Bruxelles-Zaventem', city: 'Bruxelles', lat: 50.9010, lon: 4.4844, elev: 56, hdg: 65, len: 3600, wid: 45, ids: ['07', '25'], gulls: false },
+    { id: 'FIH', icao: 'FZAA', name: 'Kinshasa N\'djili', city: 'Kinshasa', lat: -4.3858, lon: 15.4446, elev: 313, hdg: 63, len: 4700, wid: 60, ids: ['06', '24'], gulls: false },
+    { id: 'DSS', icao: 'GOBD', name: 'Dakar Blaise-Diagne', city: 'Dakar', lat: 14.6700, lon: -17.0733, elev: 89, hdg: 6, len: 3500, wid: 45, ids: ['01', '19'], gulls: true },
   ];
   AIRPORTS.forEach(a => {
     const p = geo.toXZ(a.lat, a.lon); a.x = p.x; a.z = p.z;
@@ -30,6 +36,7 @@ window.SIM = window.SIM || {};
     { lat: 3.866, lon: 11.516, r: 7000, n: 2600 }, { lat: 4.05, lon: 9.70, r: 7500, n: 2600 },
     { lat: 2.94, lon: 9.91, r: 2500, n: 500 }, { lat: 48.86, lon: 2.35, r: 11000, n: 3200 },
     { lat: 5.33, lon: -4.03, r: 9000, n: 2800 }, { lat: 40.73, lon: -73.95, r: 16000, n: 4500 },
+    { lat: 50.85, lon: 4.35, r: 9000, n: 2800 }, { lat: -4.33, lon: 15.31, r: 12000, n: 3200 }, { lat: 14.69, lon: -17.45, r: 8000, n: 2400 },
   ];
 
   // ---------- Bruit et relief ----------
@@ -80,17 +87,21 @@ window.SIM = window.SIM || {};
     if (ll.lat < 6.5 && ll.lon >= 8.5) {
       coast = (ll.lon - coastLon(ll.lat)) * 111;
       const ic = islandCoast(ll); if (ic >= 0) coast = ic;
-      const ee = ell(ll, ESTUARY); if (ee < 4) coast = Math.min(coast, (Math.sqrt(ee) - 1) * 9);
+      const ee = ell(ll, ESTUARY); coast = Math.min(coast, (Math.sqrt(ee) - 1) * 9);
     } else if (ll.lat > 35.5 && ll.lat < 44.5 && ll.lon > -1 && ll.lon < 9) coast = ll.lat < 40 ? (36.9 - ll.lat) * 111 : (ll.lat - 43.3) * 111;
     if (ll.lon < 8.5) { const wc = worldCoast(ll); if (wc !== null) coast = Math.min(coast, wc); }
-    let base = 400, amp = 260, mt = 0;
+    // régions de relief, raccordées en douceur (plus de « murs » de terrain aux frontières des régions)
     if (ll.lon < -60) return [60, 110, coast, 0];                                                 // plaine côtière américaine
-    if (ll.lon < 8.5 && ll.lat < 10) { base = 120; amp = 140; }                                  // Côte d'Ivoire, Ghana…
-    if (ll.lat >= 4.8 && ll.lat < 7.5 && ll.lon > 9.4 && ll.lon < 11.5) { base = 1100; amp = 650; mt = 1; }  // hauts plateaux de l'Ouest
-    else if (ll.lat >= 6 && ll.lat < 13) { base = 350; amp = 160; }
-    else if (ll.lat >= 13 && ll.lat < 31) { base = 450; amp = 220; mt = 0.3; }
-    else if (ll.lat >= 31 && ll.lat < 36.9) { base = 700; amp = 1100; mt = 1; }
-    else if (ll.lat >= 43) { base = 160; amp = 180; mt = 0.3; }
+    const box = (v, a, b, w) => sstep(a - w, a + w, v) * (1 - sstep(b - w, b + w, v));
+    let v = [400, 260, 0];
+    const mix = (t, q) => { if (t > 0) v = [v[0] + (q[0] - v[0]) * t, v[1] + (q[1] - v[1]) * t, v[2] + (q[2] - v[2]) * t]; };
+    mix((1 - sstep(8.2, 8.8, ll.lon)) * (1 - sstep(9.6, 10.4, ll.lat)), [120, 140, 0]);             // Côte d'Ivoire, Ghana…
+    mix(box(ll.lat, 6, 13, 0.4), [350, 160, 0]);
+    mix(box(ll.lat, 13, 31, 0.5), [450, 220, 0.3]);
+    mix(box(ll.lat, 31, 36.9, 0.5), [700, 1100, 1]);
+    mix(sstep(42.6, 43.4, ll.lat), [160, 180, 0.3]);
+    mix(box(ll.lat, 4.8, 7.5, 0.3) * box(ll.lon, 9.4, 11.5, 0.3), [1100, 650, 1]);                 // hauts plateaux de l'Ouest
+    const base = v[0], amp = v[1], mt = v[2];
     return [base, amp, coast, mt];
   }
   function isSea(x, z) {
@@ -151,18 +162,23 @@ window.SIM = window.SIM || {};
   calibratePeaks();
   // fleuves et lacs
   const RIVERS = [
+    // rivières des villes 3D (niveau d'eau fixé sous le sol de la ville)
+    { n: 'La Seine', w: 140, lv0: 219, pts: [[48.8420, 2.2500], [48.8520, 2.2740], [48.8600, 2.2895], [48.8642, 2.3010], [48.8640, 2.3150], [48.8592, 2.3350], [48.8530, 2.3480], [48.8460, 2.3640], [48.8380, 2.3780]] },
+    { n: 'Hudson', w: 1000, lv0: 0.6, pts: [[40.8800, -73.9450], [40.8200, -73.9700], [40.7700, -74.0050], [40.7300, -74.0250], [40.7000, -74.0350], [40.6800, -74.0450]] },
+    { n: 'East River', w: 480, lv0: 0.6, pts: [[40.8000, -73.9280], [40.7750, -73.9400], [40.7550, -73.9600], [40.7350, -73.9720], [40.7100, -73.9850], [40.6990, -74.0060]] },
+    { n: 'Mfoundi', w: 45, lv0: 693, pts: [[3.9300, 11.5428], [3.9100, 11.5425], [3.8950, 11.5432], [3.8800, 11.5428], [3.8600, 11.5440], [3.8300, 11.5460]] },
     { n: 'Sanaga', w: 650, pts: [[5.0, 12.2], [4.65, 11.75], [4.45, 11.3], [4.35, 10.95], [4.1, 10.55], [3.85, 10.25], [3.79, 10.12], [3.7, 9.95], [3.6, 9.75], [3.53, 9.6]] },
     { n: 'Nyong', w: 280, pts: [[3.75, 12.6], [3.6, 12.0], [3.52, 11.52], [3.45, 11.1], [3.42, 10.7], [3.38, 10.3], [3.3, 10.05], [3.27, 9.85], [3.27, 9.68]] },
     { n: 'Wouri', w: 500, pts: [[4.8, 10.0], [4.4, 9.85], [4.15, 9.76], [4.06, 9.66], [3.98, 9.6], [3.93, 9.55]] },
   ];
-  const LAKES = [{ n: 'Lac Ossa', lat: 3.80, lon: 10.03, r: 3200 }, { n: 'Lac de la Mefou', lat: 3.62, lon: 11.53, r: 1300 }, { n: 'Lac municipal', lat: 3.862, lon: 11.505, r: 450 }];
+  const LAKES = [{ n: 'Lac Ossa', lat: 3.80, lon: 10.03, r: 3200 }, { n: 'Lac de la Mefou', lat: 3.62, lon: 11.53, r: 1300 }, { n: 'Lac municipal', lat: 3.862, lon: 11.505, r: 450 }, { n: 'Baie de New York', lat: 40.676, lon: -74.046, r: 2600 }];
   const CELL = 5000, rgrid = new Map(), segs = [];
   RIVERS.forEach(r => {
     const P = r.pts.map(([la, lo]) => geo.toXZ(la, lo)), S = [];
-    for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 900)); for (let k = 0; k < n; k++) S.push({ x: a.x + (b.x - a.x) * k / n, z: a.z + (b.z - a.z) * k / n }); }
+    for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / (r.lv0 != null ? 120 : 900))); for (let k = 0; k < n; k++) S.push({ x: a.x + (b.x - a.x) * k / n, z: a.z + (b.z - a.z) * k / n }); }
     S.push(P[P.length - 1]);
     let lv = 1e9;
-    S.forEach(p => { const s = isSea(p.x, p.z) ? 0 : rawH(p.x, p.z).h - 5; lv = Math.max(0.5, Math.min(lv, s)); p.lv = lv; });
+    S.forEach(p => { if (r.lv0 != null) { p.lv = r.lv0; return; } const s = isSea(p.x, p.z) ? 0 : rawH(p.x, p.z).h - 5; lv = Math.max(0.5, Math.min(lv, s)); p.lv = lv; });
     r.S = S;
     for (let i = 0; i < S.length - 1; i++) {
       const sg = { a: S[i], b: S[i + 1], w: r.w }; segs.push(sg);
@@ -190,20 +206,44 @@ window.SIM = window.SIM || {};
     }
     return best;
   }
+  // villes 3D : le terrain y est aplani (rues, grand boulevard sur lequel on peut se poser)
+  // a → b : axe du boulevard (point de départ, point d'arrivée) ; hx : demi-largeur de la ville ; ext : marge au-delà des deux bouts
+  const CITY3D = SIM.CITY3D = [
+    { name: 'Yaoundé — centre-ville', av: 'Boulevard du 20 Mai', a: [3.9125, 11.535], b: [3.8775, 11.535], hx: 1150, ext: 0, style: 'afr' },
+    { name: 'Paris', av: 'avenue des Champs-Élysées', a: [48.8732, 2.2966], b: [48.8656, 2.3212], hx: 1800, ext: 450, style: 'paris' },
+    { name: 'New York — Manhattan', av: 'Park Avenue (élargie)', a: [40.7250, -73.9950], b: [40.7760, -73.9620], hx: 1250, ext: 200, style: 'ny' },
+  ];
+  CITY3D.forEach(c => {
+    const A = geo.toXZ(c.a[0], c.a[1]), B = geo.toXZ(c.b[0], c.b[1]);
+    c.x = (A.x + B.x) / 2; c.z = (A.z + B.z) / 2; c.rot = Math.atan2(B.x - A.x, -(B.z - A.z)); c.cr = Math.cos(c.rot); c.sr = Math.sin(c.rot);
+    c.len = Math.hypot(B.x - A.x, B.z - A.z); c.hz = c.len / 2 + c.ext;
+    let s = 0, n = 0; for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) { const w = SIM.cityW(c, i * c.hx / 2, j * c.hz / 2); s += rawH(w.x, w.z).h; n++; } c.base = Math.max(4, Math.round(s / n));
+  });
+  function cityFlat(x, z, h) {
+    for (const c of CITY3D) {
+      if (Math.abs(x - c.x) > c.hx + c.hz + 1600 || Math.abs(z - c.z) > c.hx + c.hz + 1600) continue;
+      const L = SIM.cityL(c, x, z), dx = Math.abs(L.x) - c.hx - 250, dz = Math.abs(L.z) - c.hz - 250, d = Math.max(dx, dz);
+      if (d > 1200) continue;
+      if (d <= 0) return c.base;
+      const t = d / 1200, k = t * t * (3 - 2 * t); return c.base + (h - c.base) * k;
+    }
+    for (const m of SIM.FLATS || []) { const d = Math.hypot(x - m.x, z - m.z); if (d < m.r + 600) { if (d <= m.r) return m.base; const t = (d - m.r) / 600, k = t * t * (3 - 2 * t); return m.base + (h - m.base) * k; } }
+    return h;
+  }
   function groundH(x, z) {
     if (isSea(x, z)) return 0;
     const r = rawH(x, z);
-    let h = r.h;
+    let h = cityFlat(x, z, r.h), wet = false;
     if (r.dmin > 3000) {
       const w = inland(x, z);
-      if (w) {
+      if (w) { wet = true;
         if (w.d < 1) h = w.lv - 4;
         else { const t = clamp((w.dist - w.half) / w.band, 0, 1), bank = w.lv + 1.5; h = h > bank ? bank + (h - bank) * t : bank; if (t < 0.15) h = w.lv - 4 + (bank - w.lv + 4) * (t / 0.15); }
       }
     }
-    return Math.max(h, 0.6);
+    return wet ? Math.max(h, 0.6) : Math.max(h, 2.2);
   }
-  SIM.groundH = groundH;
+  SIM.groundH = groundH; SIM._inland = inland; SIM._rawH = rawH;
   SIM.waterAt = function (x, z) { if (isSea(x, z)) return 0.4; const w = inland(x, z); return w && w.d < 1 ? w.lv : null; };
 
   function groundColor(x, z, h, sea) {
@@ -260,7 +300,7 @@ window.SIM = window.SIM || {};
         let k = J.j * n1 * 3;
         for (let j = J.j; j <= jEnd; j++) for (let i = 0; i <= N; i++) {
           const wx = J.cx + off[i], wz = J.cz + off[j], sea = isSea(wx, wz);
-          const h = sea ? -3 : groundH(wx, wz);
+          const h = sea ? -9 : groundH(wx, wz);
           pos2[k] = off[i]; pos2[k + 1] = h; pos2[k + 2] = off[j];
           const c = groundColor(wx, wz, h, sea);
           col2[k] = c[0]; col2[k + 1] = c[1]; col2[k + 2] = c[2]; k += 3;

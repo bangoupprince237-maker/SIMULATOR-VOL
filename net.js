@@ -11,7 +11,7 @@
   const hue = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; };
   N.name = clean(store.get('nick', 'Pilote-' + Math.floor(1000 + Math.random() * 9000)), 16);
 
-  const TYPE_NAMES = { A319: 'A319', A320: 'A320', A321: 'A321', gros: 'Gros porteur', jumbo: 'Jumbo', super: 'Super-jumbo', jet: 'Jet privé', militaire: 'Transport militaire', chasseur: 'Rafale', heli: 'Hélicoptère' };
+  const TYPE_NAMES = { leviathan: 'Léviathan 4 ponts', hyperion: 'Hypérion 211 m', titan: 'Titan triple pont', colosse: 'Colosse tri-fuselage', geant: 'Géant An-225', A319: 'A319', A320: 'A320', A321: 'A321', gros: 'Gros porteur', jumbo: 'Jumbo', super: 'Super-jumbo', jet: 'Jet privé', militaire: 'Transport militaire', chasseur: 'Rafale', heli: 'Hélicoptère' };
 
   // ---------- Connexion ----------
   N.init = function (sc, hooks) {
@@ -20,7 +20,7 @@
     const c = window.claude;
     if (!c || typeof c.use !== 'function') { status('Mode solo : ouvrez le jeu depuis son adresse internet (http…) pour jouer à plusieurs.'); return; }
     c.use('room').then(r => {
-      if (!r) { status('Mode solo : le multijoueur n\'est pas disponible ici.'); return; }
+      if (!r) { status('Mode solo : le multijoueur n\'est pas disponible pour vous sur cette page (connectez-vous à claude.ai, ou demandez au propriétaire de vous inviter).'); return; }
       lobby = r; bind(r, '');
       r.onConnection(ok => { N.on = ok; status(ok ? (N.roomName ? 'En ligne · salon « ' + N.roomName + ' »' : 'En ligne · salon public') : 'Reconnexion…'); },
         e => { N.on = false; status('Mode solo (' + e.code + ').'); });
@@ -116,7 +116,7 @@
         } else if (s.t === 'chasseur') {
           g.model = SIM.buildFighter({ style: ['gris', 'desert', 'noir', 'rouge'].includes(s.ps) ? s.ps : 'gris' });
         } else {
-          const ok = ['A319', 'A320', 'A321', 'gros', 'jumbo', 'super', 'jet', 'militaire'];
+          const ok = ['A319', 'A320', 'A321', 'gros', 'jumbo', 'super', 'jet', 'militaire', 'geant', 'titan', 'colosse', 'leviathan', 'hyperion'];
           g.model = SIM.buildAircraft(clean(s.l, 20) || 'sanaga', true, ok.includes(s.t) ? s.t : 'A320');
         }
         g.model.root.rotation.order = 'YXZ'; scene.add(g.model.root);

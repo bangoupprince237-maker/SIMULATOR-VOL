@@ -7,7 +7,8 @@
   const FIRS_W = [[-2, 'Accra Contrôle', '120,70', 'Accra Control'], [-20, 'Dakar Océanique', '132,70', 'Dakar Oceanic'], [-40, 'Sal Océanique', '127,30', 'Sal Oceanic'], [-60, 'Piarco Océanique', '126,90', 'Piarco Oceanic'], [-70, 'New York Océanique', '128,20', 'New York Oceanic'], [-999, 'New York Centre', '125,32', 'New York Center']];
   const A = SIM.atc = { st: 0, q: [], log: [], cleared: false, landClr: false };
   const greet = () => SIM.world.hour >= 18 || SIM.world.hour < 5 ? ['bonsoir', 'good evening'] : ['bonjour', 'good morning'];
-  const wind = () => { const w = SIM.world.weather, s = w >= 3 ? A.ws + 12 : w >= 2 ? A.ws + 6 : A.ws; return s < 3 ? ['vent calme', 'wind calm'] : [`vent ${A.wd} degrés ${s} nœuds${w >= 3 ? ', rafales ' + (s + 12) : ''}`, `wind ${A.wd} degrees ${s} knots${w >= 3 ? ', gusting ' + (s + 12) : ''}`]; };
+  const wind = () => { const W = SIM.wind || {}, d = String(W.dir || 360).padStart(3, '0'), s = Math.round(W.spd || 0), gu = W.gust || 0;   // vent réel du simulateur (le même qui pousse l'avion et oriente la manche à air)
+    return s < 3 ? ['vent calme', 'wind calm'] : [`vent ${d} degrés ${s} nœuds${gu ? ', rafales ' + gu : ''}`, `wind ${d} degrees ${s} knots${gu ? ', gusting ' + gu : ''}`]; };
   const FL = ft => 'niveau ' + Math.round(ft / 100), FLe = ft => 'flight level ' + Math.round(ft / 100);
   const enRwy = id => id.replace('R', ' right').replace('L', ' left');
 

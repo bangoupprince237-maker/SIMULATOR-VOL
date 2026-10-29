@@ -73,7 +73,34 @@
     N.on = true;
   };
   // zone dégagée autour des pistes, taxiways et aérogares
+  // forêt dense au point (x, z) ? (même règle que la pousse des arbres)
+  function density(x, z) {
+    const ll = SIM.geo.toLL(x, z), forest = SIM.vnoise(x / 900, z / 900);
+    return ll.lat < 7 ? 0.25 + forest * 0.6 : ll.lat < 13 ? 0.08 + forest * 0.12 : ll.lat < 31 ? 0.004 : ll.lat < 43 ? 0.1 : forest > 0.55 ? 0.65 : 0.06;
+  }
+  N.isForest = function (x, z) {
+    if (density(x, z) < 0.45 || SIM.isSea(x, z) || SIM.waterAt(x, z) !== null || cleared(x, z)) return false;
+    return SIM.groundH(x, z) < 2700;
+  };
+  // arbres couchés par un avion : ils disparaissent (et ne repoussent pas)
+  const flat = new Map();
+  const fkey = (x, z) => Math.floor(x / 60) + ',' + Math.floor(z / 60);
+  function flattened(x, z) { const l = flat.get(fkey(x, z)); return !!l && l.some(f => Math.hypot(f.x - x, f.z - z) < f.r); }
+  N.flatten = function (x, z, r) {
+    const f = { x, z, r };
+    for (let i = Math.floor((x - r) / 60); i <= Math.floor((x + r) / 60); i++) for (let j = Math.floor((z - r) / 60); j <= Math.floor((z + r) / 60); j++) { const k = i + ',' + j; if (!flat.has(k)) flat.set(k, []); flat.get(k).push(f); }
+    let n = 0;
+    (N.all || []).forEach(M => {
+      const a = M.instanceMatrix.array; let ch = false;
+      for (let i = 0; i < M.count; i++) { const o = i * 16; if (a[o + 13] > -5000 && Math.hypot(a[o + 12] - x, a[o + 14] - z) < r) { a[o + 13] -= 9000; ch = true; n++; } }
+      if (ch) M.instanceMatrix.needsUpdate = true;
+    });
+    return n;
+  };
   function cleared(x, z) {
+    if (SIM.city && SIM.city.inside && SIM.city.inside(x, z, 80)) return true;
+    if (SIM.roads && SIM.roads.near && SIM.roads.near(x, z, 9)) return true;
+    if (flat.size && flattened(x, z)) return true;
     for (const a of SIM.AIRPORTS) {
       if (Math.abs(x - a.x) > 7000 || Math.abs(z - a.z) > 7000) continue;
       for (const C of a.comps) { const { lx, lz } = C.toL(x, z); if (lx > -230 && lx < (C.layout.TERM + 140) && Math.abs(lz) < a.len / 2 + 700) return true; }
@@ -103,8 +130,7 @@
       const x = (i + hash(i, j, 2)) * CELL, z = (j + hash(i, j, 3)) * CELL, d = Math.hypot(x - px, z - pz);
       if (d > RAD) continue;
       const ll = SIM.geo.toLL(x, z);
-      const forest = SIM.vnoise(x / 900, z / 900);
-      let dens = ll.lat < 7 ? 0.25 + forest * 0.6 : ll.lat < 13 ? 0.08 + forest * 0.12 : ll.lat < 31 ? 0.004 : ll.lat < 43 ? 0.1 : forest > 0.55 ? 0.65 : 0.06;
+      let dens = density(x, z);
       dens *= clamp(1 - d / RAD * 0.5, 0.4, 1);
       if (r1 > dens) continue;
       if (SIM.isSea(x, z) || SIM.waterAt(x, z) !== null || cleared(x, z)) continue;

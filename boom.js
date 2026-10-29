@@ -12,6 +12,9 @@
     tex.smoke = SIM.glowTex('rgba(40,36,34,0.9)', 'rgba(30,30,30,0)');
     tex.spray = SIM.glowTex('rgba(240,248,255,0.95)', 'rgba(220,235,245,0)');
     tex.dust = SIM.glowTex('rgba(120,98,72,0.85)', 'rgba(110,90,70,0)');
+    tex.grey = SIM.glowTex('rgba(150,150,150,0.75)', 'rgba(140,140,140,0)');
+    tex.leaf = SIM.glowTex('rgba(70,110,40,0.95)', 'rgba(60,90,30,0)');
+    tex.tire = SIM.glowTex('rgba(215,215,215,0.8)', 'rgba(200,200,200,0)');
     // éclair lumineux des explosions au sol, mottes de terre et éclats, traces de brûlure
     B.light = new THREE.PointLight(0xffa850, 0, 140, 2); scene.add(B.light);
     B.chunkGeo = new THREE.DodecahedronGeometry(0.25, 0); B.chunkMat = [new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 1 }), new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.9 }), new THREE.MeshStandardMaterial({ color: 0x5a5a52, roughness: 0.6, metalness: 0.4 })];
@@ -33,9 +36,9 @@
   };
 
   function sprite(t, x, y, z, size, life, o) {
-    if (B.sprites.length > 650 && (t === 'smoke' || t === 'spray' || t === 'dust')) return null;
+    if (B.sprites.length > 650 && (t === 'smoke' || t === 'spray' || t === 'dust' || t === 'grey' || t === 'leaf' || t === 'tire')) return null;
     if (B.sprites.length > 900) return null;
-    const m = new THREE.SpriteMaterial({ map: tex[t], transparent: true, depthWrite: false, blending: t === 'smoke' || t === 'spray' || t === 'dust' ? THREE.NormalBlending : THREE.AdditiveBlending });
+    const m = new THREE.SpriteMaterial({ map: tex[t], transparent: true, depthWrite: false, blending: ['smoke', 'spray', 'dust', 'grey', 'leaf', 'tire'].includes(t) ? THREE.NormalBlending : THREE.AdditiveBlending });
     const s = new THREE.Sprite(m); s.position.set(x, y, z); s.scale.setScalar(size); scene.add(s);
     B.sprites.push(Object.assign({ s, t, life, age: 0, size, grow: 1, vy: 0, vx: 0, vz: 0, fade: 1, delay: 0 }, o || {})); return s;
   }

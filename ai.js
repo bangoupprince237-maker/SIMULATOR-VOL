@@ -3,11 +3,11 @@
   const D2R = SIM.D2R, R2D = SIM.R2D, clamp = SIM.clamp, P = SIM.P, KT = 0.514444, FT = 0.3048;
   const wrap = a => ((a + 540) % 360) - 180;
   const AI = SIM.ai = { list: [], ships: [] };
-  const AIRLINES = [['mungo', 'Air Mungo', 'A320'], ['atlas', 'Atlantic Star', 'jumbo'], ['kivu', 'Kivu Airways', 'A321'], ['prive', 'Jet Privé', 'jet'], ['sablon', 'Sablon Air', 'A320'], ['lagune', 'Lagune Air', 'super'], ['essai', 'Essais Constructeur', 'gros'], ['armee', 'Force Aérienne', 'militaire'], ['sahel', 'Sahel Air', 'A319'], ['kribi', 'Kribi Express', 'A319'], ['seine', 'Seine Airways', 'gros'], ['prive', 'Jet Privé', 'jet']];
+  const AIRLINES = [['mungo', 'Air Mungo', 'A320'], ['atlas', 'Atlantic Star', 'jumbo'], ['kivu', 'Kivu Airways', 'A321'], ['prive', 'Jet Privé', 'jet'], ['sablon', 'Sablon Air', 'A320'], ['lagune', 'Lagune Air', 'super'], ['essai', 'Essais Constructeur', 'gros'], ['armee', 'Force Aérienne', 'militaire'], ['sahel', 'Sahel Air', 'A319'], ['kribi', 'Kribi Express', 'A319'], ['seine', 'Seine Airways', 'gros'], ['prive', 'Jet Privé', 'jet'], ['kribi', 'Antonov Cargo', 'geant'], ['belge', 'Nuit Bleue', 'A320'], ['tricolore', 'Tricolore', 'gros'], ['constructeur', 'Démonstrateur', 'A321'], ['lion', 'Lion Vert', 'A319'], ['saphir', 'Saphir', 'gros'], ['emeraude', 'Emeraude', 'A320'], ['corail', 'Corail', 'A321'], ['lagon', 'Lagon', 'jumbo'], ['bordeaux', 'Bordeaux', 'super'], ['mangue', 'Mangue', 'A319']];
   let scene = null, nextId = 0;
 
   AI.init = function (sc) { scene = sc; makeShips(); };
-  function say(spk, txt) { SIM.radio && SIM.radio(spk, txt, true); }
+  function say(spk, txt, en) { SIM.radio && SIM.radio(spk, txt, true, en); }
 
   // ---------- Création ----------
   function spawn(opts) {
@@ -18,6 +18,7 @@
     AI.list.push(ai); return ai;
   }
   function remove(ai) { scene.remove(ai.m.root); if (ai.trail) scene.remove(ai.trail.line); if (ai.stand) ai.stand.busy = false; AI.list.splice(AI.list.indexOf(ai), 1); }
+  AI.destroy = ai => { if (AI.list.includes(ai)) remove(ai); };
   AI.clear = function () { AI.list.slice().forEach(remove); AI.destDone = false; AI.cruiseT = 0; };
 
   // repères de piste : extrémité k (0 = ids[0], 1 = ids[1])
@@ -61,7 +62,7 @@
     const R = SIM.route, a = R.dep, C = a.comps[0], { s, L } = endInfo(C, R.de), hz = s * (a.len / 2 - 70 - (ahead || 0)), p0 = W(C, L.TX, hz - s * 320);
     AI.depAI = spawn({ ap: a, C, end: R.de, mode: 'taxi', next: 'rollNow', x: p0.x, z: p0.z, y: a.elev + 0.15, psi: Math.atan2(W(C, L.TX, hz).x - p0.x, -(W(C, L.TX, hz).z - p0.z)), V: 8, n1: 0.32, flap: 0.25,
       path: [W(C, L.TX, hz), W(C, a.wid / 2 + 30, hz - s * 10), W(C, 0, hz - s * 70), W(C, 0, hz - s * 150)] });
-    say('SOL', `${AI.depAI.cs}, roulez point d'arrêt piste ${R.de.id}, traversez devant le trafic aligné.`);
+    say('SOL', `${AI.depAI.cs}, roulez point d'arrêt piste ${R.de.id}, traversez devant le trafic aligné.`, `${AI.depAI.cs}, taxi to holding point runway ${R.de.id}, cross ahead of the lined-up traffic.`);
     return AI.depAI;
   };
   const sameDir = (C, hdg) => C.ends.reduce((b, e) => Math.abs(wrap(e.hdg - hdg)) < Math.abs(wrap(b.hdg - hdg)) ? e : b);
@@ -120,8 +121,8 @@
         follow(ai, dt, true); ai.gearDown = true; ai.flap = 1; ai.n1 = 0.5;
         const eh = ai.end.hdg * D2R, d = (ai.end.x - ai.x) * Math.sin(eh) - (ai.end.z - ai.z) * Math.cos(eh), tgt = a.elev + 15 + d * Math.tan(3 * D2R);
         ai.gamma = -3 * D2R; ai.y += (tgt - ai.y) * Math.min(1, dt * 0.8); ai.theta = 2.5 * D2R; ai.V += (70 - ai.V) * dt * 0.2;
-        if (d < 3000 && !ai.landClr) { ai.landClr = true; if (!runwayOccupiedByPlayer(ai.C)) say('TOUR', `${ai.cs}, piste ${ai.end.id}, autorisé atterrissage.`); }
-        if (d < 1800 && runwayOccupiedByPlayer(ai.C)) { ai.mode = 'goaround'; ai.air = 0; ai.gamma = 0; ai.path = [{ x: ai.x + Math.sin(ai.psi) * 30000, z: ai.z - Math.cos(ai.psi) * 30000 }]; ai.pi = 0; say('TOUR', `${ai.cs}, remettez les gaz, je répète, remettez les gaz, piste occupée.`); }
+        if (d < 3000 && !ai.landClr) { ai.landClr = true; if (!runwayOccupiedByPlayer(ai.C)) say('TOUR', `${ai.cs}, piste ${ai.end.id}, autorisé atterrissage.`, `${ai.cs}, runway ${ai.end.id}, cleared to land.`); }
+        if (d < 1800 && runwayOccupiedByPlayer(ai.C)) { ai.mode = 'goaround'; ai.air = 0; ai.gamma = 0; ai.path = [{ x: ai.x + Math.sin(ai.psi) * 30000, z: ai.z - Math.cos(ai.psi) * 30000 }]; ai.pi = 0; say('TOUR', `${ai.cs}, remettez les gaz, je répète, remettez les gaz, piste occupée.`, `${ai.cs}, go around, I say again, go around, runway occupied.`); }
         else if (ai.y - g < 12) ai.mode = 'flare';
         break;
       }
@@ -132,7 +133,7 @@
       case 'rollout':
         ai.V = Math.max(ai.V - 2.4 * dt, 12); ai.theta = Math.max(0, ai.theta - 2 * D2R * dt); ai.n1 = ai.V > 40 ? 0.7 : 0.25; ai.rev = ai.V > 40;
         follow(ai, dt, false); ai.y = g;
-        if (ai.V <= 12.5) { ai.rev = false; exitPath(ai); ai.mode = 'taxi'; ai.next = 'park'; ai.flap = 0; say('TOUR', `${ai.cs}, dégagez à la prochaine bretelle, contactez le sol.`); }
+        if (ai.V <= 12.5) { ai.rev = false; exitPath(ai); ai.mode = 'taxi'; ai.next = 'park'; ai.flap = 0; say('TOUR', `${ai.cs}, dégagez à la prochaine bretelle, contactez le sol.`, `${ai.cs}, vacate at the next taxiway, contact ground.`); }
         break;
       case 'taxi': case 'lineup': {
         const tp = ai.path[ai.pi], nxt = ai.path[ai.pi + 1];
@@ -140,7 +141,7 @@
         const dTp = tp ? Math.hypot(tp.x - ai.x, tp.z - ai.z) : 0, vt = sharp > 40 && dTp < 60 ? 4 : ai.mode === 'lineup' ? 5 : 9;
         ai.V += clamp(vt - ai.V, -2 * dt, 1 * dt); ai.n1 = 0.3; ai.y = g; ai.theta = 0;
         if (follow(ai, dt, false)) {
-          if (ai.next === 'rollNow') { ai.next = null; ai.mode = 'roll'; ai.path = [W(ai.C, 0, -endInfo(ai.C, ai.end).s * (a.len / 2 + 25000))]; ai.pi = 0; say('TOUR', `${ai.cs}, piste ${ai.end.id}, vent calme, autorisé décollage.`); }
+          if (ai.next === 'rollNow') { ai.next = null; ai.mode = 'roll'; ai.path = [W(ai.C, 0, -endInfo(ai.C, ai.end).s * (a.len / 2 + 25000))]; ai.pi = 0; say('TOUR', `${ai.cs}, piste ${ai.end.id}, vent calme, autorisé décollage.`, `${ai.cs}, runway ${ai.end.id}, wind calm, cleared for take-off.`); }
           else if (ai.mode === 'lineup') { ai.mode = 'roll'; ai.path = [W(ai.C, 0, -endInfo(ai.C, ai.end).s * (a.len / 2 + 25000))]; ai.pi = 0; }
           else if (ai.next === 'hold') { ai.mode = 'hold'; ai.V = 0; }
           else { ai.mode = 'parked'; ai.V = 0; ai.psi = (a.hdg + 90) * D2R; }
@@ -151,7 +152,7 @@
         ai.V = 0; ai.y = g; ai.n1 = 0.24;
         if (!runwayBusy(ai.C, ai) && !playerBlocks(ai.C)) {
           ai.holdT = (ai.holdT || 0) + dt;
-          if (ai.holdT > 8) { const { s } = endInfo(ai.C, ai.end), hz = s * (a.len / 2 - 70); ai.mode = 'lineup'; ai.path = [W(ai.C, 0, hz), W(ai.C, 0, hz - s * 60)]; ai.pi = 0; say('TOUR', `${ai.cs}, piste ${ai.end.id}, autorisé décollage.`); }
+          if (ai.holdT > 8) { const { s } = endInfo(ai.C, ai.end), hz = s * (a.len / 2 - 70); ai.mode = 'lineup'; ai.path = [W(ai.C, 0, hz), W(ai.C, 0, hz - s * 60)]; ai.pi = 0; say('TOUR', `${ai.cs}, piste ${ai.end.id}, autorisé décollage.`, `${ai.cs}, runway ${ai.end.id}, cleared for take-off.`); }
         } else ai.holdT = 0;
         break;
       case 'parked': ai.V = 0; ai.n1 = Math.max(0, ai.n1 - dt * 0.02); ai.y = g; ai.parkT = (ai.parkT || 0) + dt; break;
@@ -195,7 +196,7 @@
     });
     AI.list.slice().forEach(ai => {
       if (ai.mode === 'parked' && ai.parkT > 150 && Math.hypot(ai.x - P.x, ai.z - P.z) > 1500) { remove(ai); return; }
-      step(ai, dt);
+      if (ai.blocked > 0) { ai.blocked -= dt; ai.V = 0; } else step(ai, dt);
       const far = Math.hypot(ai.x - P.x, ai.z - P.z);
       if ((ai.mode === 'cruise' || ai.mode === 'climb' || ai.mode === 'goaround') && far > 70000) { remove(ai); return; }
       const r = ai.m.root; r.visible = far < (ai.mode === 'cruise' || ai.mode === 'climb' ? 40000 : 9000); r.position.set(ai.x, ai.y, ai.z); r.rotation.set(ai.theta, -ai.psi, -ai.phi, 'YXZ');

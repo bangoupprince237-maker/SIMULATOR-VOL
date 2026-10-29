@@ -23,24 +23,26 @@
   // sélecteurs départ / destination
   SIM.AIRPORTS.forEach(a => { for (const s of ['dep', 'dest']) { const o = document.createElement('option'); o.value = a.id; o.textContent = a.city + ' (' + a.icao + ')'; $(s).appendChild(o); } });
   $('dep').value = 'NSI'; $('dest').value = 'DLA';
+  SIM.AIRPORTS.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = 'Escale à ' + a.city + ' (' + a.icao + ')'; $('esc').appendChild(o); });
   // grille des vues
   V.VIEWS.forEach(([id, name]) => { const b = document.createElement('button'); b.className = 'vw' + (id === V.view ? ' on' : ''); b.dataset.v = id; b.textContent = name; $('viewGrid').appendChild(b); });
 
   // ---------- Événements de simulation ----------
   SIM.onEvent = function (t, d) {
     switch (t) {
-      case 'reset': fcCalls = {}; P.visY = null; V.awaitRwy = false; V.wantAuto = false; P.holdPt = null; if (V.myBoard) { SIM.life.removeBoarding(V.myBoard); V.myBoard = null; } if (P.heli) SIM.startHeli({ a: SIM.route.dep }); SIM.ai.reset(); SIM.atc.reset(); $('radioL').innerHTML = ''; V.trail = []; V.clearFx(); $('over').hidden = true; refreshPanel(); updRoute(); break;
+      case 'reset': if (V.plane && V.plane.repair) V.plane.repair(); fcCalls = {}; P.visY = null; V.awaitRwy = false; V.wantAuto = false; P.holdPt = null; if (V.myBoard) { SIM.life.removeBoarding(V.myBoard); V.myBoard = null; } if (P.heli) SIM.startHeli({ a: SIM.route.dep }); SIM.ai.reset(); SIM.atc.reset(); $('radioL').innerHTML = ''; V.trail = []; V.clearFx(); $('over').hidden = true; refreshPanel(); updRoute(); break;
       case 'liftoff': toast('Décollage ! Montée positive.'); V.say('Montée positive'); break;
       case 'touchdown': {
         const vs = Math.round(d.vs), q = vs > -120 ? 'Toucher parfait' : vs > -300 ? 'Bon atterrissage' : vs > -600 ? 'Atterrissage ferme' : 'Atterrissage dur';
-        const where = d.water ? ' — amerrissage !' : d.belly ? ' — sur le ventre !' : d.surf.type === 'piste' ? '' : ' — sur l\'herbe / le terrain';
+        const where = d.water ? ' — amerrissage !' : d.belly ? ' — sur le ventre !' : d.surf.type === 'piste' ? '' : d.surf.type === 'avenue' ? ' — sur le boulevard de la ville !' : d.surf.type === 'route' ? ' — dans une rue !' : d.surf.type === 'foret' ? ' — dans la forêt !' : ' — sur l\'herbe / le terrain';
         V.touchdown(d.vs); toast(`${d.water ? 'Amerrissage réussi' : q} : ${vs} ft/min${where}`, 4500); V.say(d.water ? 'Amerrissage' : q); break;
       }
       case 'crash': V.crashFx(); $('overTitle').textContent = 'Accident'; $('overTitle').style.color = 'var(--red)'; $('overText').textContent = d; V.say('Accident'); toast(d, 5000); setTimeout(() => { if (P.crashed) $('over').hidden = false; }, 9000); break;
       case 'parked': {
         if (V.myBoard) SIM.life.removeBoarding(V.myBoard);
-        const scl = V.plane.body.scale.z;
-        if (d.board) { V.myBoard = SIM.life.addBoarding(d.s, d.a.elev, scl, 'on', 26); V.myBoard.player = 'on'; toast('Embarquement des passagers au poste ' + d.n + '…', 5000); SIM.radio('VOUS', `${SIM.atc.CS}, au poste ${d.n}, embarquement en cours.`); break; }
+        const scl = V.plane.body.scale.clone();
+        if (d.board) { V.myBoard = SIM.life.addBoarding(d.s, d.a.elev, scl, 'on', 26); V.myBoard.player = 'on'; toast('Embarquement des passagers au poste ' + d.n + '…', 5000); SIM.radio('VOUS', `${SIM.atc.CS}, au poste ${d.n}, embarquement en cours.`, false, `${SIM.atc.CS}, on stand ${d.n}, boarding in progress.`); break; }
+        if (d.a === SIM.route.dest && escaleArrive()) break;
         V.myBoard = SIM.life.addBoarding(d.s, d.a.elev, scl, 'off', 26); V.myBoard.player = 'off'; toast('Débarquement des passagers…', 5000);
         const dest = SIM.route.dest, ok = d.a === dest;
         $('overTitle').textContent = ok ? 'Vol réussi' : 'Avion garé'; $('overTitle').style.color = 'var(--green)';
@@ -59,9 +61,26 @@
         SIM.ai.crossing(650); SIM.atc.st = 0; SIM.atc.t = 0; SIM.atc.cleared = false; V.setView('chase');
         toast('Aligné au point d\'attente : un avion va passer devant vous et décoller. Attendez l\'autorisation.', 6000); break;
       }
-      case 'stopped': toast(P.surf && P.surf.type === 'eau' ? 'Avion arrêté sur l\'eau : il flotte. Pleine puissance (T) et levier MONTÉE pour redécoller.' : P.belly ? 'Avion immobilisé sur le ventre.' : P.surf && P.surf.ap ? 'Avion arrêté. « Garer au poste » pour rejoindre le terminal.' : 'Avion arrêté hors piste. Vous pouvez redécoller (gaz à fond) ou sortir avec E (Rafale).', 5000); break;
+      case 'stopped': if (P.surf && P.surf.ap && P.surf.ap === SIM.route.dest && escaleArrive()) break; toast(P.surf && P.surf.type === 'eau' ? 'Avion arrêté sur l\'eau : il flotte. Pleine puissance (T) et levier MONTÉE pour redécoller.' : P.belly ? 'Avion immobilisé sur le ventre.' : P.surf && P.surf.ap ? 'Avion arrêté. « Garer au poste » pour rejoindre le terminal.' : 'Avion arrêté hors piste. Vous pouvez redécoller (gaz à fond) ou sortir avec E (Rafale).', 5000); break;
       case 'splash': for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, r = Math.random() * 12; SIM.boom.puff(d.x + Math.cos(a) * r, d.y + 0.5, d.z + Math.sin(a) * r, 6 + Math.random() * 8, 2 + Math.random() * 1.5, 'spray'); } V.boomSound(0.25); break;
       case 'wp': toast('Point suivant : ' + d.n); break;
+      case 'forest': {
+        const half = (SIM.tyx().half || 17) + 6; SIM.nature.flatten(d.x, d.z, half);
+        for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, r = Math.random() * half; SIM.boom.puff(d.x + Math.cos(a) * r, P.y + 2 + Math.random() * 6, d.z + Math.sin(a) * r, 4 + Math.random() * 6, 1.6 + Math.random(), Math.random() < 0.7 ? 'leaf' : 'dust'); }
+        V.shakeT = Math.max(V.shakeT || 0, 0.25); break;
+      }
+      case 'skid': { V.skidOn = 0.3;
+        const c = Math.cos(P.psi), s = Math.sin(P.psi);
+        for (const sx of [-1, 1]) SIM.boom.puff(d.x + c * sx * 3.8, d.y + 0.6, d.z + s * sx * 3.8, 2.5 + Math.random() * 2, 1.4, 'tire');
+        const now = performance.now(); if (!V.skidMsg || now - V.skidMsg > 7000) { V.skidMsg = now; toast('Dérapage ! Trop vite dans le virage : ralentissez (B) avant de tourner.', 3000); } break;
+      }
+      case 'engDmg': {
+        const n = d.i + 1, txt = { hard: `Toucher brutal : le moteur ${n} est abîmé et fume.`, forest: 'Les arbres ont abîmé les réacteurs : ils fument légèrement.', random: `Panne : le moteur ${n} fume et perd de la puissance !`, manual: `Panne simulée : le moteur ${n} fume (${Math.round(d.d * 100)} % de dégâts).` }[d.why] || `Moteur ${n} endommagé.`;
+        toast(txt + (d.d >= 1 ? ' Il est ARRÊTÉ.' : ' « Réparer » au sol, ou posez-vous sur un aéroport.'), 5000); V.say(d.d >= 1 ? 'Moteur ' + n + ' arrêté' : 'Moteur ' + n + ' endommagé');
+        if (!P.onGround) SIM.radio('VOUS', d.d >= 1 ? `Pan pan, pan pan, ${SIM.atc.CS}, moteur ${n} arrêté, nous poursuivons sur un moteur.` : `${SIM.atc.CS}, fumée sur le moteur ${n}, nous surveillons.`, false, d.d >= 1 ? `Pan pan, ${SIM.atc.CS}, engine ${n} failure.` : `${SIM.atc.CS}, smoke from engine ${n}, monitoring.`);
+        break;
+      }
+      case 'noFuel': toast('PANNE SÈCHE ! Les moteurs s\'arrêtent : planez vers une piste, un champ, une route ou l\'eau.', 8000); SIM.radio('VOUS', `Mayday, mayday, mayday, ${SIM.atc.CS}, panne sèche, moteurs arrêtés, nous planons.`, false, `Mayday mayday mayday, ${SIM.atc.CS}, fuel exhaustion, both engines out.`); break;
       case 'mode': toast(d); break;
       case 'call': toast(d); V.say(d); break;
       case 'warn': V.tailT = 1; break;
@@ -74,22 +93,27 @@
   SIM.onRadio = function (m) {
     const d = document.createElement('div'), v = m.spk === 'VOUS';
     if (m.traffic) d.className = 'tr';
-    const s = document.createElement('span'); s.className = 's' + (v ? ' v' : m.spk === 'BRIEFING' ? ' b' : ''); s.textContent = m.spk; d.appendChild(s);
-    const lang = $('radioLang').value;
+    const s = document.createElement('span'); s.className = 's' + (v ? ' v' : m.spk === 'BRIEFING' ? ' b' : ''); const lang = $('radioLang').value; s.textContent = lang === 'fr' ? m.spk : ({ TOUR: 'TOWER', SOL: 'GROUND', APPROCHE: 'APPROACH', 'CONTRÔLE': 'CONTROL' }[m.spk] || m.spk); d.appendChild(s);
     if (lang !== 'en' || !m.en) d.appendChild(document.createTextNode(m.txt));
     if (m.en && lang !== 'fr') { const e = document.createElement('em'); e.textContent = (lang === 'en' ? '' : ' — ') + m.en; d.appendChild(e); }
     const L = $('radioL'); L.appendChild(d); while (L.children.length > (m.spk === 'BRIEFING' ? 2 : 3)) L.removeChild(L.firstChild);
     $('radioF').textContent = SIM.atc.cleared ? 'décollage autorisé' : '';
     if (radioVoice) {
-      if (lang !== 'en' || !m.en) V.say(m.txt.replace(/(\d),(\d)/g, '$1 décimale $2'), 'fr-FR', v ? 0.85 : m.traffic ? 1.15 : 1.0, 1.12);
-      if (m.en && lang !== 'fr') V.say(m.en, 'en-US', v ? 0.85 : 1.0, 1.1);
+      if ((lang !== 'en' && lang !== 'enx') || !m.en) V.say(m.txt.replace(/(\d),(\d)/g, '$1 décimale $2'), 'fr-FR', v ? 0.85 : m.traffic ? 1.15 : 1.0, 1.12);
+      if (m.en && lang !== 'fr') {
+        V.say(m.en, 'en-US', v ? 0.85 : 1.0, 1.1);
+        if (!V.enWarn && V.audio && window.speechSynthesis && speechSynthesis.getVoices().length && !V.hasEnglishVoice()) { V.enWarn = true; toast('Aucune voix anglaise n\'est installée sur cet ordinateur : la radio anglaise ne peut pas être lue à voix haute. Windows : Paramètres → Heure et langue → Voix → ajouter « English (United States) ».', 12000); }
+      }
     }
     if (m.spk === 'BRIEFING') fillBrief();
   };
   function updRoute() { const R = SIM.route; $('routeInfo').textContent = `${R.dep.id} → ${R.dest.id} · ${Math.round(R.dist / 1000)} km · FL${Math.round(R.cruise / 100)}`; }
   function doReset(gate) {
     if ($('dep').value === $('dest').value) { toast('Choisissez une destination différente du départ.'); return; }
-    SIM.reset($('dep').value, $('dest').value);
+    const esc = $('esc').value;
+    if (esc && esc !== $('dep').value && esc !== $('dest').value) { SIM.reset($('dep').value, esc); V.finalDest = $('dest').value; V.escId = esc; }
+    else { SIM.reset($('dep').value, $('dest').value); V.finalDest = null; V.escId = null; if (esc) $('esc').value = ''; }
+    V.fuelWarn = 0;
     if ((gate == null ? $('gateStart').checked : gate) && !P.heli) {
       const m = SIM.park(true);
       if (!m) { V.setView('orbit'); V.orb.yaw = 2.3; V.orb.pitch = 0.25; V.orb.zoom = 0.8; SIM.radio('VOUS', `${SIM.route.dep.city} Sol, ${SIM.atc.CS}, au poste ${P.parkInfo.n}, embarquement en cours.`, false, `${SIM.route.dep.city} Ground, ${SIM.atc.CS}, on stand ${P.parkInfo.n}, boarding in progress.`); }
@@ -100,7 +124,50 @@
   function fillBrief() {
     const b = SIM.atc.brief(); $('briefT').innerHTML = b.rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
   }
-  $('dep').onchange = $('dest').onchange = () => doReset();
+  $('dep').onchange = $('dest').onchange = $('esc').onchange = () => doReset();
+  // ---------- Carburant, escales et pannes ----------
+  const A_ = id => SIM.AIRPORTS.find(a => a.id === id);
+  function escaleArrive() {
+    if (!V.finalDest || !SIM.route || P.crashed) return false;
+    const here = SIM.route.dest, next = A_(V.finalDest);
+    SIM.repair(); SIM.setLeg(here.id, next.id); SIM.refuel(false); P.fuel = Math.max(P.fuel, SIM.planFuel(SIM.route.dist));
+    V.finalDest = null; V.escId = null; V.fuelWarn = 0; fillBrief();
+    toast(`Escale à ${here.city} : plein fait (${(P.fuel / 1000).toFixed(1)} t) et avion vérifié. Prochaine étape : ${next.city} (${Math.round(SIM.route.dist / 1000)} km). Gaz quand vous voulez !`, 9000);
+    SIM.radio('SOL', `${SIM.atc.CS}, bienvenue à ${here.city}. Le camion-citerne a terminé, plein effectué. Étape suivante : ${next.city}.`, false, `${SIM.atc.CS}, welcome to ${here.city}. Refuelling complete. Next leg: ${next.city}.`);
+    V.say('Escale à ' + here.city + '. Plein effectué.');
+    return true;
+  }
+  // lieux célèbres : approche des boulevards (atterrissage en ville) et survol des monuments
+  const SPOTS = [];
+  SIM.city.avenues().forEach(a => SPOTS.push({ n: 'Atterrir sur ' + a.name + ' (' + a.city.split(' —')[0] + ')', av: a }));
+  SIM.landmarks.list.forEach(d => SPOTS.push({ n: 'Survoler : ' + d.name.split(' ·')[0], lm: d }));
+  SPOTS.forEach((s, i) => { const o = document.createElement('option'); o.value = i; o.textContent = s.n; $('spot').appendChild(o); });
+  function placeAir(x, z, y, psi, spd, landing) {
+    if (P.heli) return toast('Choisissez un avion (Votre avion → Type) pour cette approche.');
+    if (V.myBoard) { SIM.life.removeBoarding(V.myBoard); V.myBoard = null; }
+    Object.assign(P, { x, z, y, psi, theta: landing ? 0.02 : 0.03, phi: 0, gamma: landing ? -3 * SIM.D2R : 0, V: spd, onGround: false, gearDown: !!landing, gearPos: landing ? 1 : 0, flapSel: landing ? 4 : 1, flapPos: landing ? 1 : 0.25,
+      thr: landing ? 0.4 : 0.65, rev: false, pbrk: false, brake: false, parked: false, boarding: false, doorsClosed: true, autoTaxi: null, landed: false, crashed: false, belly: false, airTime: 100, lawB: 1, liftOn: false, lift: 0, n1: [0.6, 0.6], eng: [true, true], ci: {}, spoilSel: 0, turbo: false });
+    Object.assign(P.ap, { on: false, athr: false, full: false, srs: false });
+    if (SIM.atc) { SIM.atc.q.length = 0; SIM.atc.st = 99; }
+    V.clearFx(); SIM.world.terrain.rebuild(P.x, P.z, true); SIM.nature.rebuild(P.x, P.z, true); $('over').hidden = true; V.setView('chase');
+  }
+  $('spotGo').onclick = () => {
+    const s = SPOTS[+$('spot').value]; if (!s) return;
+    if (s.av) {
+      const a = s.av, psi = Math.atan2(a.a.x - a.b.x, -(a.a.z - a.b.z)), d = 5500, fx = Math.sin(psi), fz = -Math.cos(psi);
+      placeAir(a.b.x - fx * d, a.b.z - fz * d, a.base + 15 + d * Math.tan(3 * SIM.D2R), psi, SIM.perf().vapp * SIM.KT, true);
+      toast(`Finale sur ${a.name} : ${Math.round(a.len)} m de chaussée, 80 m de large. Gardez l'axe, réduisez les gaz à 10 m, freinez (B) — attention aux immeubles de chaque côté !`, 9000);
+      V.say('Finale sur ' + a.name);
+    } else {
+      const d = s.lm, base = d.base != null ? d.base : SIM.groundH(d.x, d.z);
+      placeAir(d.x - 2600, d.z + 400, base + Math.max(d.H * 0.6, 250), Math.PI / 2 - 0.15, 120, false);
+      toast(`Cap sur ${d.name} : il est droit devant vous. Ne le percutez pas !`, 7000);
+    }
+  };
+  $('btnFuel').onclick = () => { const m = SIM.refuel(true); if (m) return toast(m); SIM.repair(); V.fuelWarn = 0; toast(`Plein fait : ${(P.fuel / 1000).toFixed(1)} tonnes de carburant (réservoir plein). Réacteurs vérifiés.`, 4000); V.say('Plein effectué'); };
+  $('btnFail').onclick = () => { if (P.crashed) return; const i = P.dmg && P.dmg[0] > P.dmg[1] ? 1 : 0; SIM.damageEngine(i, 0.35, 'manual'); };
+  $('btnRepair').onclick = () => { if (!P.onGround || P.V > 1) return toast('Réparation possible au sol, avion arrêté.'); SIM.repair(); toast('Réacteurs réparés : plus de fumée.'); };
+  $('randFail').addEventListener('change', ev => { P.randFail = ev.target.checked; toast(P.randFail ? 'Pannes aléatoires activées : surveillez la fumée et l\'écran moteurs.' : 'Pannes aléatoires coupées.'); });
   $('btnReset').onclick = () => doReset(false);
   $('overBtn').onclick = () => { $('overBtn').textContent = 'Recommencer au départ'; doReset(); };
   $('btnBriefDep').onclick = () => SIM.atc.sayBrief('dep'); $('btnBriefApp').onclick = () => SIM.atc.sayBrief('app');
@@ -173,6 +240,16 @@
     P.rev = false; P.thr = clamp(p, 0, 1);
     if (P.thr < 0.02 && P.ap.athr && !P.onGround) { P.ap.athr = false; toast('Auto-poussée déconnectée'); }
   }
+  // levier d'aérofreins réglable (0 à 100 %) comme la manette des gaz
+  const sbLev = $('sbLev');
+  const sbFromEv = ev => { const r = sbLev.getBoundingClientRect(); let v = clamp((ev.clientY - r.top) / r.height, 0, 1); if (v < 0.04) v = 0; if (v > 0.96) v = 1; return Math.round(v * 20) / 20; };
+  sbLev.addEventListener('pointerdown', ev => { sbLev.setPointerCapture(ev.pointerId); P.spoilSel = sbFromEv(ev); });
+  sbLev.addEventListener('pointermove', ev => { if (sbLev.hasPointerCapture(ev.pointerId)) P.spoilSel = sbFromEv(ev); });
+  $('sbArm').onclick = () => { P.spoilArm = !P.spoilArm; toast(P.spoilArm ? 'Aérofreins armés pour l\'atterrissage' : 'Aérofreins désarmés', 1300); };
+  // marche arrière au bouton (maintenir)
+  const back = $('btnBack'), backOn = on => { P.backHold = on; if (on && !P.onGround) toast('Marche arrière : seulement au sol.'); };
+  back.addEventListener('pointerdown', ev => { back.setPointerCapture(ev.pointerId); backOn(true); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(e => back.addEventListener(e, () => backOn(false)));
   const leverFromEv = ev => { const r = thr.getBoundingClientRect(); return TMIN + (1 - clamp((ev.clientY - r.top) / r.height, 0, 1)) * (1 - TMIN); };
   thr.addEventListener('pointerdown', ev => { thr.setPointerCapture(ev.pointerId); setLever(leverFromEv(ev)); });
   thr.addEventListener('pointermove', ev => { if (thr.hasPointerCapture(ev.pointerId)) setLever(leverFromEv(ev)); });
@@ -214,20 +291,24 @@
   emPad.addEventListener('pointermove', ev => { if (emOn) emEv(ev); });
   const emUp = () => { emOn = false; P.emX = 0; P.emY = 0; }; emPad.addEventListener('pointerup', emUp); emPad.addEventListener('pointercancel', emUp);
   // ---------- Menu Affichage (masquer radar, instruments, etc.) ----------
-  const dispEls = { nd: ['nd'], pfd: ['pfd', 'fma'], ecam: ['ecam'], ils: [], radio: ['radio'], emerg: ['emerg'], card: ['fcard'], netnames: ['netLbls'], netchat: ['netChat'] };
+  const dispEls = { nd: ['nd'], pfd: ['pfd', 'fma'], ecam: ['ecam'], ils: [], radio: ['radio'], emerg: ['emerg'], card: ['fcard'], netnames: ['netLbls'], netchat: ['netChat'], tank: ['tankP'], sig: ['sigP'] };
   let dispPref = {}; try { dispPref = JSON.parse(localStorage.getItem('simDisp') || '{}'); } catch (e) { }
   function applyDisp() {
     $$('#dispMenu input[data-el]').forEach(cb => { const k = cb.dataset.el, on = dispPref[k] !== false; cb.checked = on; dispEls[k].forEach(id => { $(id).style.display = on ? '' : 'none'; }); if (k === 'ils') V.showILS = on; });
     try { localStorage.setItem('simDisp', JSON.stringify(dispPref)); } catch (e) { }
+    $('qbTank').classList.toggle('on', dispPref.tank !== false); $('qbSig').classList.toggle('on', dispPref.sig !== false);
   }
   $$('#dispMenu input[data-el]').forEach(cb => cb.addEventListener('change', () => { dispPref[cb.dataset.el] = cb.checked; applyDisp(); }));
   // un bouton « masquer » propre à chaque élément (le menu Affichage permet de le réafficher)
-  const names = { nd: 'le radar / GPS', pfd: 'les instruments', ecam: "l'écran moteurs", ils: 'le cadre ILS', radio: 'la radio', emerg: 'le levier de secours', card: 'la fiche de vol', netnames: 'les noms des joueurs', netchat: 'la discussion' };
-  Object.entries({ nd: 'nd', pfd: 'pfd', ecam: 'ecam', ils: 'ils', radio: 'radio', emerg: 'emerg', card: 'fcard', netchat: 'netChat' }).forEach(([k, id]) => {
+  const names = { nd: 'le radar / GPS', pfd: 'les instruments', ecam: "l'écran moteurs", ils: 'le cadre ILS', radio: 'la radio', emerg: 'le levier de secours', card: 'la fiche de vol', netnames: 'les noms des joueurs', netchat: 'la discussion', tank: 'le réservoir', sig: 'les signaux de vol' };
+  Object.entries({ nd: 'nd', pfd: 'pfd', ecam: 'ecam', ils: 'ils', radio: 'radio', emerg: 'emerg', card: 'fcard', netchat: 'netChat', tank: 'tankP', sig: 'sigP' }).forEach(([k, id]) => {
     const b = document.createElement('button'); b.className = 'hideX'; b.textContent = '✕'; b.title = 'Masquer ' + names[k] + ' (réafficher : menu Affichage)'; b.setAttribute('aria-label', b.title);
     b.addEventListener('click', ev => { ev.stopPropagation(); dispPref[k] = false; applyDisp(); toast(names[k].charAt(0).toUpperCase() + names[k].slice(1) + ' masqué — menu « Affichage » pour le réafficher'); });
     $(id).appendChild(b);
   });
+  // boutons à l'écran : faire apparaître / disparaître le réservoir et les signaux
+  $('qbTank').onclick = () => { dispPref.tank = dispPref.tank === false; applyDisp(); toast(dispPref.tank ? 'Réservoir affiché' : 'Réservoir masqué', 1500); };
+  $('qbSig').onclick = () => { dispPref.sig = dispPref.sig === false; applyDisp(); toast(dispPref.sig ? 'Signaux de vol affichés' : 'Signaux de vol masqués', 1500); };
   $('dispBtn').onclick = () => { const m = $('dispMenu'); m.hidden = !m.hidden; $('dispBtn').setAttribute('aria-expanded', String(!m.hidden)); };
   $('dispAll').onclick = () => { const anyOn = Object.keys(dispEls).some(k => dispPref[k] !== false); Object.keys(dispEls).forEach(k => dispPref[k] = !anyOn); $('dispAll').textContent = anyOn ? 'Tout afficher' : 'Tout masquer'; applyDisp(); };
   applyDisp();
@@ -262,7 +343,7 @@
   br.addEventListener('pointerdown', () => P.brake = true); ['pointerup', 'pointerleave', 'pointercancel'].forEach(e => br.addEventListener(e, () => P.brake = false));
   $$('.abrk').forEach(b => b.onclick = () => P.autobrake = +b.dataset.a);
   // ---------- Changer d'avion ----------
-  const AIRNAME = { sanaga: 'Air Sanaga', mungo: 'Air Mungo', kivu: 'Kivu Airways', sablon: 'Sablon Air', essai: 'Essais Constructeur', sahel: 'Sahel Air', kribi: 'Kribi Express', seine: 'Seine Airways', lagune: 'Lagune Air', atlas: 'Atlantic Star', prive: 'Jet Privé', armee: 'Force Aérienne' };
+  const AIRNAME = { saphir: 'Saphir', emeraude: 'Emeraude', rubis: 'Rubis', champagne: 'Champagne', nuit: 'Nuit Violette', corail: 'Corail', lagon: 'Lagon', graphite: 'Graphite', bordeaux: 'Bordeaux', azur: 'Azur', mangue: 'Mangue', lavande: 'Lavande', belge: 'Nuit Bleue', tricolore: 'Tricolore', constructeur: 'Demonstrator', lion: 'Lion Vert', sanaga: 'Air Sanaga', mungo: 'Air Mungo', kivu: 'Kivu Airways', sablon: 'Sablon Air', essai: 'Essais Constructeur', sahel: 'Sahel Air', kribi: 'Kribi Express', seine: 'Seine Airways', lagune: 'Lagune Air', atlas: 'Atlantic Star', prive: 'Jet Privé', armee: 'Force Aérienne' };
   function fillAcList() {
     const sel = $('acList'), cur = sel.value, ch = SIM.ai.choices().concat(SIM.life.choices().map(c => Object.assign(c, { d: Math.hypot(c.h.x - P.x, c.h.z - P.z) }))).sort((p, q) => p.d - q.d);
     sel.innerHTML = ''; if (!ch.length) { const o = document.createElement('option'); o.textContent = 'Aucun avion à proximité pour le moment'; o.value = ''; sel.appendChild(o); }
@@ -283,16 +364,18 @@
     V.rebuildPlayer(info.liv, info.type); SIM.takeOver(info); V.clearFx(); V.trail = []; $('over').hidden = true;
     $('myLiv').value = info.liv; $('myType').value = info.type;
     toast('Vous pilotez maintenant ' + info.cs + ' (' + info.state + ')', 4500); V.say('Vous avez les commandes');
-    SIM.radio('VOUS', `${info.cs}, je reprends les commandes.`); updRoute(); fillAcList();
+    SIM.radio('VOUS', `${info.cs}, je reprends les commandes.`, false, `${info.cs}, I have control.`); updRoute(); fillAcList();
   }
   $('btnTake').onclick = () => { const v = $('acList').value; if (v) takeOver(v.startsWith('h') ? v : +v); else toast('Choisissez un appareil dans la liste.'); };
   $('btnNearest').onclick = () => { const c = SIM.ai.choices()[0]; if (c) takeOver(c.id); else toast('Aucun avion à proximité.'); };
   const rebuildMine = () => {
     const ty = $('myType').value, wasHeli = P.heli;
-    if (ty.startsWith('heli')) { const kind = ty.slice(5); V.rebuildPlayer(kind, 'heli'); SIM.startHeli({ a: SIM.route.dep }); SIM.atc.setCS(SIM.life.HNAME[kind] + ' 12'); V.clearFx(); $('over').hidden = true;
+    if (ty.startsWith('heli')) { const kind = ty.slice(5); if (V.myBoard) { SIM.life.removeBoarding(V.myBoard); V.myBoard = null; } V.rebuildPlayer(kind, 'heli'); SIM.startHeli({ a: SIM.route.dep }); SIM.atc.setCS(SIM.life.HNAME[kind] + ' 12'); V.clearFx(); $('over').hidden = true;
       toast('Hélicoptère prêt sur l\'héliport de ' + SIM.route.dep.city + '. Maintenez W ou Z pour monter, S pour descendre, relâchez = stationnaire. ↑ avancer, ↓ freiner, ← → tourner.', 8000); SIM.atc.sayBrief('dep'); fillBrief(); return; }
     let liv = $('myLiv').value; if (ty === 'militaire') { liv = 'armee'; $('myLiv').value = 'armee'; } if (ty === 'jet' && liv === 'sanaga') { liv = 'prive'; $('myLiv').value = 'prive'; }
+    const fPct = P.fuelCap ? clamp((P.fuel || 0) / P.fuelCap, 0, 1) : 0.6;
     V.rebuildPlayer(liv, ty); if (wasHeli) doReset(false);
+    P.fuelCap = SIM.tyx().cap; P.fuel = P.onGround ? SIM.planFuel(SIM.route.dist) : fPct * P.fuelCap;   // le réservoir change avec l'avion
     SIM.atc.setCS(ty === 'chasseur' ? 'Rafale 01' : ty === 'militaire' ? 'Force Aérienne 401' : AIRNAME[liv] + ' 241');
     const help = ty === 'chasseur' ? ' Gaz à fond (T) = postcombustion, rotation à 140 kt, W/S = montée/descente rapides. Combat : Entrée = missile, Y = cible, Retour ← = leurres, « Aller au front » dans le panneau Combat.' : '';
     toast('Votre appareil : ' + $('myType').selectedOptions[0].textContent + '.' + help, 7000); SIM.atc.sayBrief('dep'); fillBrief(); SIM.war.applySize(); };
@@ -340,6 +423,8 @@
   }
   $('btnFull').onclick = fullToggle;
   $('chkAssist').onchange = e => ap.assist = e.target.checked;
+  { let mc = true; try { mc = localStorage.getItem('simManual') !== '0'; } catch (e) { } P.manualCtl = mc; $('manualCtl').checked = mc;
+    $('manualCtl').onchange = e => { P.manualCtl = e.target.checked; try { localStorage.setItem('simManual', P.manualCtl ? '1' : '0'); } catch (er) { } toast(P.manualCtl ? 'Vous seul commandez le train, les gaz et les volets.' : 'L\'aide peut de nouveau sortir le train, régler les gaz et les volets.'); }; }
 
   // ---------- Environnement ----------
   const tod = $('tod');
@@ -351,7 +436,17 @@
   $$('.wx').forEach(b => b.onclick = () => setWx(+b.dataset.w));
   SIM.onThunder = () => V.thunder();
   $('btnBirds').onclick = () => SIM.world.birdsOn = SIM.world.birdsOn === false;
-  $('btnSound').onclick = () => { const on = V.toggleSound(); toast(on ? 'Son activé' : 'Son coupé'); };
+  $('btnSound').onclick = () => { const on = V.toggleSound(); try { localStorage.setItem('simSound', on ? '1' : '0'); } catch (e) { } toast(on ? 'Son activé (Maj+S pour couper)' : 'Son coupé (Maj+S pour remettre)'); };
+  // le son démarre tout seul au premier clic ou à la première touche (les navigateurs l'exigent), sauf si vous l'avez coupé
+  const autoSound = ev => {
+    window.removeEventListener('pointerdown', autoSound, true); window.removeEventListener('keydown', autoSound, true);
+    let pref = '1'; try { pref = localStorage.getItem('simSound') || '1'; } catch (e) { }
+    if (pref === '0' || V.audio) return;
+    if (ev.target && ev.target.id === 'btnSound') return;
+    if (ev.type === 'keydown' && ev.shiftKey && ev.key.toLowerCase() === 's') return;
+    V.toggleSound();
+  };
+  window.addEventListener('pointerdown', autoSound, true); window.addEventListener('keydown', autoSound, true);
   $$('.tacc').forEach(b => b.onclick = () => { SIM.timeScale = +b.dataset.x; });
   $('viewGrid').addEventListener('click', ev => { const b = ev.target.closest('.vw'); if (b) V.setView(b.dataset.v); });
 
@@ -385,6 +480,10 @@
     const tg = ev.target, tag = tg && tg.tagName;
     if (tag === 'TEXTAREA' || (tag === 'INPUT' && !['range', 'checkbox', 'button', 'radio'].includes(tg.type))) return;
     if (tag === 'SELECT' || tag === 'BUTTON' || tag === 'INPUT') { if (ev.key === 'Tab') return; ev.preventDefault(); giveBack(tg); }
+    if ((ev.key === 'Alt' || ev.code === 'AltLeft') && !SIM.troops.active && !SIM.war.truckMode) {
+      ev.preventDefault(); if (!ev.repeat) { P.backHold = true; if (P.onGround) toast(P.V > 1 ? 'Marche arrière : arrêtez d\'abord l\'avion (B).' : 'Marche arrière… (relâchez Alt pour arrêter)', 1600); else toast('Marche arrière : seulement au sol.', 1400); }
+      return;
+    }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     // à pied ou dans le camion : toutes les touches vont au personnage / au camion (H garde le panneau)
     if (SIM.troops.active || SIM.war.truckMode) {
@@ -394,6 +493,69 @@
       if (SIM.troops.active) SIM.troops.key(lk0, ev, true); else SIM.war.truckKey(lk0, ev, true);
       return;
     }
+    // ---------- Toutes les commandes du panneau au clavier ----------
+    // chiffres (rangée du haut ou pavé numérique) : réglages du pilote automatique ; Maj + chiffre : moteurs, trim, embarquement
+    const dg = (/^(?:Digit|Numpad)(\d)$/.exec(ev.code) || [])[1];
+    if (dg !== undefined && (ev.shiftKey || !DIG[ev.code])) {
+      const tip = m => toast(m, 1100); ev.preventDefault();
+      if (!ev.shiftKey) {
+        if (dg === '1') { ap.hdg = (ap.hdg + 350) % 360; if (ap.on && !ap.full) ap.lat = 'HDG'; tip('Cap sélectionné : ' + String(ap.hdg).padStart(3, '0') + '°'); }
+        else if (dg === '3') { ap.hdg = (ap.hdg + 10) % 360; if (ap.on && !ap.full) ap.lat = 'HDG'; tip('Cap sélectionné : ' + String(ap.hdg).padStart(3, '0') + '°'); }
+        else if (dg === '7') { ap.spdMng = false; ap.spd = Math.max(130, ap.spd - 5); tip('Vitesse sélectionnée : ' + ap.spd + ' kt'); }
+        else if (dg === '9') { ap.spdMng = false; ap.spd = Math.min(350, ap.spd + 5); tip('Vitesse sélectionnée : ' + ap.spd + ' kt'); }
+        else if (dg === '5') { ap.alt = Math.max(1000, ap.alt - 1000); if (ap.vert !== 'VS') ap.vert = 'DES'; tip('Altitude sélectionnée : ' + ap.alt + ' ft'); }
+        else if (dg === '0') { ap.alt = Math.min(41000, ap.alt + 1000); if (ap.vert !== 'VS') ap.vert = 'CLB'; tip('Altitude sélectionnée : ' + ap.alt + ' ft'); }
+        return;
+      }
+      if (ev.repeat && !['3', '4', '5', '7'].includes(dg)) return;
+      switch (dg) {
+        case '1': $('eng1').onclick(); break;
+        case '2': $('eng2').onclick(); break;
+        case '3': ap.vs = Math.max(-6000, ap.vs - 100); tip('Vitesse verticale sélectionnée : ' + ap.vs + ' ft/min'); break;
+        case '4': ap.vs = Math.min(6000, ap.vs + 100); tip('Vitesse verticale sélectionnée : ' + ap.vs + ' ft/min'); break;
+        case '5': $('trimDn').onclick(); tip('Trim : piquer'); break;
+        case '6': $('trimZero').onclick(); break;
+        case '7': $('trimUp').onclick(); tip('Trim : cabrer'); break;
+        case '8': $('btnBoard').onclick(); break;
+        case '9': if (V.myBoard) { $('btnSkipBoard').onclick(); toast('Portes fermées'); } else toast('Pas d\'embarquement en cours.'); break;
+        case '0': $('btnReset').onclick(); break;
+      }
+      return;
+    }
+    const lkS = ev.key.toLowerCase();
+    // < et > : accélération du temps · , et ; : échelle du radar · : noms des sommets
+    if ((ev.key === '<' || ev.key === '>' || ev.code === 'NumpadDivide' || ev.code === 'NumpadMultiply') && !ev.repeat) {
+      const X = [1, 2, 4, 8, 16, 32], i = Math.max(0, X.indexOf(SIM.timeScale)), up = ev.key === '>' || ev.code === 'NumpadMultiply';
+      SIM.timeScale = X[clamp(i + (up ? 1 : -1), 0, X.length - 1)]; toast('Accélération du temps : ×' + SIM.timeScale, 1200); return;
+    }
+    if (ev.key === ',' && !ev.shiftKey) { V.ndStep(-1); return; }
+    if (ev.key === ';' && !ev.shiftKey) { V.ndStep(1); return; }
+    if (ev.key === ':' && !ev.repeat) { $('btnPeaks').onclick(); toast(SIM.world.labelsOn ? 'Noms des sommets affichés' : 'Noms des sommets masqués', 1200); return; }
+    const SHIFT = {
+      s: () => $('btnSound').onclick(),
+      r: () => { $('radioMute').onclick(); toast(radioVoice ? 'Voix radio activée' : 'Voix radio coupée', 1300); },
+      t: () => $('btnATHR').onclick(),
+      n: () => { $('btnNAV').onclick(); toast('Pilote auto : navigation (NAV)', 1300); },
+      p: () => $('btnAPPR').onclick(),
+      h: () => { $('btnHDG').onclick(); toast('Pilote auto : cap sélectionné (CAP SÉL.)', 1300); },
+      w: () => { $('btnVS').onclick(); toast('Pilote auto : vitesse verticale (V/S)', 1300); },
+      z: () => { $('btnVS').onclick(); toast('Pilote auto : vitesse verticale (V/S)', 1300); },
+      l: () => { $('btnALT').onclick(); toast('Pilote auto : maintien d\'altitude (ALT)', 1300); },
+      i: () => { $('thrIdle').onclick(); toast('Manette : ralenti (IDLE)', 1100); },
+      c: () => { $('thrCl').onclick(); toast('Manette : montée (CL)', 1100); },
+      x: () => { $('thrFlx').onclick(); toast('Manette : décollage réduit (FLX)', 1100); },
+      g: () => { $('btnSpdArm').onclick(); toast(P.spoilArm ? 'Aérofreins armés pour l\'atterrissage' : 'Aérofreins désarmés', 1300); },
+      k: () => $('btnLandAid').onclick(),
+      j: () => $('btnBriefDep').onclick(),
+      m: () => $('btnBriefApp').onclick(),
+      o: () => $('btnPark').onclick(),
+      u: () => { $('ndMode').onclick(); toast('Radar : mode ' + V.ndMode, 1100); },
+      y: () => $('liftOff').onclick(),
+      e: () => $('btnFuel').onclick(),
+      ' ': () => { P.spoilSel = P.spoilSel >= 0.99 ? 0 : Math.min(1, Math.round((P.spoilSel + 0.25) * 4) / 4); toast('Aérofreins : ' + Math.round(P.spoilSel * 100) + ' %', 1000); },
+    };
+    if (ev.key === 'Delete' && !ev.repeat) { ev.preventDefault(); if (ev.shiftKey) $('btnRepair').onclick(); else $('btnFail').onclick(); return; }
+    if (ev.shiftKey && SHIFT[lkS]) { ev.preventDefault(); if (!ev.repeat) SHIFT[lkS](); return; }
     // E : sortir du Rafale quand il est posé et arrêté
     if (ev.key.toLowerCase() === 'e' && !ev.repeat && !ev.shiftKey && SIM.troops.canExit()) { SIM.troops.exit(); return; }
     // levier de secours : chiffres 4 6 8 2 (rangée du haut, même en AZERTY, ou pavé numérique)
@@ -437,9 +599,10 @@
     if (SIM.troops.active) SIM.troops.key(ev.key.toLowerCase(), ev, false);
     if (SIM.war.truckMode) SIM.war.truckKey(ev.key.toLowerCase(), ev, false);
     if (DIG[ev.code]) { emKeys.delete(DIG[ev.code]); return; }
+    if (ev.key === 'Alt' || ev.code === 'AltLeft') { ev.preventDefault(); P.backHold = false; }
     inp.keys[ev.key.toLowerCase()] = false; if (ev.key.toLowerCase() === 'b') { P.brake = false; P.brakeMax = false; }
   });
-  window.addEventListener('blur', () => { inp.keys = {}; emKeys.clear(); P.brake = false; P.brakeMax = false; SIM.troops.keys = {}; SIM.troops.fireHeld = false; SIM.war.tk = {}; });
+  window.addEventListener('blur', () => { P.backHold = false; inp.keys = {}; emKeys.clear(); P.brake = false; P.brakeMax = false; SIM.troops.keys = {}; SIM.troops.fireHeld = false; SIM.war.tk = {}; });
 
   function readInputs(dt) {
     if (SIM.troops.active || SIM.war.truckMode) { P.stickX = P.stickY = 0; P.rudder = 0; return; }
@@ -448,7 +611,7 @@
     let tx = inp.padActive ? inp.sx : (K['arrowright'] ? 1 : 0) - (K['arrowleft'] ? 1 : 0);
     const r = Math.min(1, dt * (P.sensitive ? 16 : 6));
     P.stickY += (ty - P.stickY) * r; P.stickX += (tx - P.stickX) * r;
-    const rR = K['e'] || (K['d'] && !K['shift']), rL = K['q'];
+    const rR = (K['e'] || K['d']) && !K['shift'], rL = K['q'] && !K['shift'];
     if (rR || rL) { inp.rudHeld = true; P.rudder += (((rR ? 1 : 0) - (rL ? 1 : 0)) - P.rudder) * r; rud.value = P.rudder; }
     else if (inp.rudHeld) { inp.rudHeld = false; rudUp(); }
     if (ap.on && (Math.abs(ty) > 0.5 || Math.abs(tx) > 0.5)) { Object.assign(ap, { on: false, full: false, srs: false, flare: false }); toast('Reprise en manuel : pilote auto déconnecté'); V.say('Pilote automatique déconnecté'); }
@@ -466,7 +629,7 @@
     const gb = $('btnGear'); gb.classList.toggle('on', P.gearDown); gb.textContent = P.gearDown ? 'TRAIN SORTI · rentrer (G)' : 'TRAIN RENTRÉ · sortir (G)';
     $('gearKnob').style.top = P.gearDown ? 'calc(100% - 36px)' : '36px'; mark('.wx', b => +b.dataset.w === SIM.world.weather);
     const gs = P.gearPos > 0.99 ? 'dn' : P.gearPos < 0.01 ? '' : 'tr'; $('glA').className = gs; ['gl0', 'gl1', 'gl2'].forEach(id => $(id).className = gs);
-    mark('.spd', b => +b.dataset.s === P.spoilSel); $('btnSpdArm').classList.toggle('on', P.spoilArm);
+    mark('.spd', b => Math.abs(+b.dataset.s - P.spoilSel) < 0.13); $('btnSpdArm').classList.toggle('on', P.spoilArm);
     $('btnPBrk').classList.toggle('on', P.pbrk); $('btnBrake').classList.toggle('on', P.brake);
     mark('.abrk', b => +b.dataset.a === P.autobrake); mark('.lt', b => P.lights[b.dataset.l]);
     $('btnRev').classList.toggle('on', P.rev); $('eng1').classList.toggle('on', P.eng[0]); $('eng2').classList.toggle('on', P.eng[1]);
@@ -489,6 +652,7 @@
     const fh = $('flapHandle'); fh.style.top = (P.flapSel / 4 * 100) + '%'; fh.textContent = SIM.FLAPNAME[P.flapSel];
     const h = $('thrHandle'), lv = P.rev ? -0.25 * (P.revAmt == null ? 1 : P.revAmt) : P.thr;
     h.style.top = ((1 - (lv - TMIN) / (1 - TMIN)) * 100) + '%';
+    const sh = $('sbHandle'); sh.style.top = (P.spoilSel * 100) + '%'; sh.textContent = P.spoilSel > 0 ? Math.round(P.spoilSel * 100) + ' %' : (P.spoilArm ? 'ARM' : '0 %'); $('sbArm').classList.toggle('on', P.spoilArm);
     h.textContent = P.rev ? 'REV' : P.thr >= 0.99 ? 'TOGA' : Math.abs(P.thr - 0.9) < 0.01 ? 'FLX' : Math.abs(P.thr - 0.8) < 0.01 ? 'CL' : P.thr < 0.01 ? 'IDLE' : Math.round(P.thr * 100) + '%';
   }
 
@@ -504,7 +668,7 @@
     const R = SIM.route, pf = SIM.perf(), FT = SIM.FT, KT = SIM.KT;
     if (P.heli) return { ph: 'Hélicoptère', rows: [['Croisière', '300 à 450 m (1 000–1 500 ft)'], ['Vitesse croisière', '130 kt (max 150)'], ['Approche', '< 40 kt à 1 km du H'], ['Toucher', '< 500 ft/min, < 10 kt'], ['Votre altitude', km1(P.agl) + ' km sol']] };
     const cruiseFt = Math.min(R.cruise, pf.ceil || 39000), cruiseM = cruiseFt * FT, altFt = P.y / FT, ias = P.ias / KT;
-    const vapp = pf.vapp, vls = Math.round(vapp * 0.93), tgt = vapp + 5, vmax = vapp + 15;
+    const vapp = pf.vapp, vls = Math.round(vapp * 0.93), tgt = SIM.landSpd(), vmax = Math.max(vapp + 15, 175);
     const tdNm = ((cruiseM - R.dest.elev) / Math.tan(3 * SIM.D2R)) / 1852 + 10, tdKm = tdNm * 1.852, rem = SIM.routeRemaining() / 1000;
     const climbLeft = cruiseM - P.y, fpm = Math.round(vapp * 5.3 / 50) * 50;
     const rows = [], cls = {};
@@ -522,7 +686,14 @@
     rows.push(['Vitesse croisière', `Mach ${pf.mach} (≈ ${Math.round(pf.mach * 573)} kt)`]);
     rows.push(['Début descente', `à ${Math.round(tdKm)} km de l'arrivée`]);
     rows.push(['Reste', `${Math.round(rem)} km → ${R.dest.city}`]);
-    rows.push(['Atterrissage parfait', `visez ${tgt} kt`]); cls[rows.length - 1] = 'ok';
+    if (V.finalDest) { rows.push(['Escale', `${R.dest.city}, puis ${(SIM.AIRPORTS.find(a => a.id === V.finalDest) || {}).city}`]); cls[rows.length - 1] = 'ok'; }
+    // carburant : quantité, autonomie, suffisant ou non pour finir l'étape
+    const ffh = Math.max(P.ff || 0, 0.05), endur = P.fuel / ffh / 60, need = Math.max(0, SIM.fuelNeed(rem * 1000) - SIM.fuelNeed(0) * 0.55);
+    const fuelOk = P.fuel >= need, pct = Math.round(P.fuel / Math.max(P.fuelCap || 1, 1) * 100);
+    rows.push(['Carburant', `${(P.fuel / 1000).toFixed(1)} t (${pct} %)` + (P.onGround ? '' : ` · autonomie ${endur > 600 ? '+10 h' : Math.round(endur) + ' min'}`)]); cls[rows.length - 1] = P.fuel <= 0 ? 'bad' : fuelOk ? 'ok' : 'warn';
+    if (!fuelOk) { rows.push(['Attention', P.onGround ? 'pas assez pour ce vol : choisissez une ESCALE (panneau Vol)' : 'carburant juste : posez-vous pour refaire le plein']); cls[rows.length - 1] = 'bad'; }
+    if (P.dmg && (P.dmg[0] > 0.01 || P.dmg[1] > 0.01)) { rows.push(['Réacteurs', P.dmg.map((d, i) => `M${i + 1} ${d >= 1 ? 'ARRÊTÉ' : d > 0.01 ? 'fume ' + Math.round(d * 100) + ' %' : 'OK'}`).join(' · ')]); cls[rows.length - 1] = 'bad'; }
+    rows.push(['Atterrissage parfait', `visez ${tgt} kt (jusqu'à ${Math.max(tgt, 170)} kt)`]); cls[rows.length - 1] = 'ok';
     rows.push(['Vitesse min / max', `${vls} kt / ${vmax} kt`]);
     rows.push(['Configuration', 'train 600 m · volets FULL']);
     rows.push(['Pente finale', `3° · ≈ ${fpm} ft/min`]);
@@ -533,12 +704,19 @@
     } else { rows.push(['Votre altitude', `${km1(P.y)} km (${ftf(altFt)} ft) · ${Math.round(ias)} kt`]); }
     return { ph, rows, cls, cruiseFt, cruiseM, vapp, vls, tgt, vmax, tdKm, rem };
   }
+  function fuelCalls() {
+    if (P.crashed || P.heli || P.onGround || !P.fuelCap) return;
+    const pct = P.fuel / P.fuelCap;
+    if (pct < 0.1 && (V.fuelWarn || 0) < 1) { V.fuelWarn = 1; toast('Carburant bas (moins de 10 %) : prévoyez un atterrissage.', 6000); V.say('Carburant bas'); SIM.radio('VOUS', `${SIM.atc.CS}, carburant bas, nous demandons une arrivée directe.`, false, `${SIM.atc.CS}, low fuel, request direct approach.`); }
+    if (pct < 0.03 && (V.fuelWarn || 0) < 2) { V.fuelWarn = 2; toast('CARBURANT CRITIQUE : posez-vous tout de suite !', 6000); V.say('Carburant critique'); }
+  }
   function updateCard() {
+    fuelCalls();
     const on = fcard.style.display !== 'none' && !document.body.classList.contains('clear') && !SIM.troops.active && !SIM.war.truckMode;
     document.body.classList.toggle('card-on', on);
     if (on) document.documentElement.style.setProperty('--fch', fcard.offsetHeight + 'px');
     const d = cardData(); $('fcPh').textContent = d.ph;
-    const h = d.rows.map((r, i) => r[0] === 'bar' ? `<div class="bar"><i style="width:${r[1]}%"></i></div>` : `<dt>${r[0]}</dt><dd class="${d.cls[i] || ''}">${r[1]}</dd>`).join('');
+    const h = d.rows.map((r, i) => r[0] === 'bar' ? `<div class="bar"><i style="width:${r[1]}%"></i></div>` : `<dt>${r[0]}</dt><dd class="${(d.cls || {})[i] || ''}">${r[1]}</dd>`).join('');
     if (fcBody._h !== h) { fcBody.innerHTML = h; fcBody._h = h; }
     if (P.heli || P.crashed || d.cruiseFt == null) return;
     // annonces radio (français + anglais)
@@ -549,6 +727,91 @@
     if (!P.onGround && fcCalls.climb && d.rem <= d.tdKm && d.rem > 20) say('desc', `Commencez la descente maintenant. Pour un atterrissage parfait : vitesse ${d.tgt} nœuds en finale, minimum ${d.vls}, maximum ${d.vmax}.`, `Start your descent now. For a perfect landing: final approach speed ${d.tgt} knots, minimum ${d.vls}, maximum ${d.vmax}.`);
     if (!P.onGround && d.rem < 15 && P.agl / SIM.FT < 3500) say('final', `Approche finale : tenez ${d.tgt} nœuds (marge de 5 nœuds), jamais sous ${d.vls}. Train sorti, volets FULL, environ ${Math.round(SIM.perf().vapp * 5.3 / 50) * 50} pieds par minute.`, `Final approach: hold ${d.tgt} knots including a 5 knot margin, never below ${d.vls}. Gear down, flaps full.`);
     if (!P.onGround && d.rem < 8 && P.agl / SIM.FT < 520 && fcCalls.final) { const ias = Math.round(P.ias / SIM.KT); say('500', `500 pieds, vitesse ${ias} nœuds : ${ias < d.vls ? 'trop lent, ajoutez des gaz !' : ias > d.vmax + 10 ? 'trop rapide, réduisez !' : 'stabilisé, continuez.'}`, `Five hundred, speed ${ias} knots: ${ias < d.vls ? 'too slow, add power!' : ias > d.vmax + 10 ? 'too fast, reduce!' : 'stable, continue.'}`); }
+  }
+  // ---------- Réservoir et signaux de vol (voyants + bandeau vif à chaque étape) ----------
+  const sigPrev = {}; let banT = 0, banQ = [];
+  function banner(cls, txt, sub, snd) {
+    banQ.push({ cls, txt, sub, snd }); if (banQ.length > 4) banQ.shift();
+  }
+  function bannerTick(dt) {
+    const b = $('sigBanner'); banT -= dt;
+    if (banT <= 0 && b.classList.contains('show')) { b.classList.remove('show'); banT = -0.4; return; }
+    if (banT <= -0.35 && banQ.length && dispPref.sig !== false) {
+      const m = banQ.shift(); b.className = m.cls; b.innerHTML = ''; b.appendChild(document.createTextNode(m.txt)); if (m.sub) { const s = document.createElement('small'); s.textContent = m.sub; b.appendChild(s); }
+      void b.offsetWidth; b.classList.add('show'); banT = 4.2; if (m.snd) chime(m.cls === 'r' ? 2 : m.cls === 'a' ? 1 : 0);
+    }
+  }
+  function chime(k) {   // petit carillon (ding-dong) quand une étape est atteinte
+    const A = V.audio; if (!A || !A.ctx) return;
+    try { const c = A.ctx, t0 = c.currentTime, notes = k === 2 ? [880, 660, 880, 660] : k === 1 ? [740, 587] : [659, 880];
+      notes.forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = f; g.gain.setValueAtTime(0, t0 + i * 0.22); g.gain.linearRampToValueAtTime(0.16, t0 + i * 0.22 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.22 + 0.5); o.connect(g); g.connect(c.destination); o.start(t0 + i * 0.22); o.stop(t0 + i * 0.22 + 0.55); });
+    } catch (e) { }
+  }
+  function setSig(id, cls, txt) { const e = $(id); if (e._c !== cls) { e.className = 'sg ' + cls; e._c = cls; } const sp = e.lastElementChild; if (sp.textContent !== txt) sp.textContent = txt; }
+  let tankWave = 0;
+  function sigUpdate(dt) {
+    bannerTick(dt);
+    const cap = P.fuelCap || SIM.tyx().cap || 1, fuel = Math.max(0, P.fuel || 0), pct = clamp(fuel / cap, 0, 1);
+    // --- réservoir ---
+    if (dispPref.tank !== false) {
+      const ffKgS = P.heli ? 0.12 : Math.max(P.ff || 0, 0), ffH = ffKgS * 3600;
+      tankWave += dt * 3; const y = 10 + 54 * (1 - pct), wv = [];
+      for (let x = 10; x <= 190; x += 10) wv.push(`${x},${(y + Math.sin(x * 0.08 + tankWave) * 1.6 + (P.phi || 0) * (x - 100) * 0.12).toFixed(1)}`);
+      $('tkLvl').setAttribute('y', y.toFixed(1)); $('tkLvl').setAttribute('height', (64 - y + 1).toFixed(1));
+      $('tkWave').setAttribute('d', 'M10,64 L' + wv.join(' L') + ' L190,64 Z');
+      const col = pct < 0.1 ? ['#ff8a80', '#b3121b'] : pct < 0.25 ? ['#ffd27a', '#c77a00'] : ['#7cf0b4', '#139c5c'];
+      if ($('tkC1')._c !== col[0]) { $('tkC1').setAttribute('stop-color', col[0]); $('tkC2').setAttribute('stop-color', col[1]); $('tkC1')._c = col[0]; }
+      $('tkTxt').textContent = Math.round(pct * 100) + ' %';
+      $('tkKg').textContent = (fuel >= 10000 ? (fuel / 1000).toFixed(1) + ' t' : Math.round(fuel) + ' kg');
+      const end = ffKgS > 0.01 ? fuel / ffKgS / 60 : 0, rem = SIM.routeRemaining ? SIM.routeRemaining() / 1000 : 0, gs = Math.max(P.V * Math.cos(P.gamma || 0), 1), need = rem * 1000 / gs / 60;
+      const ok = P.onGround || end > need * 1.1;
+      $('tkPct').textContent = ok ? 'OK' : 'JUSTE'; $('tkPct').style.color = pct < 0.1 || !ok ? 'var(--red)' : pct < 0.25 ? 'var(--amber)' : 'var(--green)';
+      $('tkFF').textContent = Math.round(ffH).toLocaleString('fr-FR') + ' kg/h';
+      $('tkEnd').textContent = P.onGround ? `capacité ${(cap / 1000).toFixed(1)} t · plein : Maj+E` : `autonomie ${Math.floor(end / 60)} h ${String(Math.round(end % 60)).padStart(2, '0')} · arrivée dans ${Math.round(need)} min`;
+      $('tankP').classList.toggle('low', pct < 0.1 || !ok);
+    }
+    // --- signaux ---
+    if (P.heli || P.crashed) { if (dispPref.sig !== false) { setSig('sgAlt', '', P.heli ? 'hélicoptère : 300–450 m' : '—'); setSig('sgSpd', '', '—'); setSig('sgDes', '', '—'); setSig('sgFuel', pct < 0.1 ? 'r' : pct < 0.25 ? 'a' : 'g', Math.round(pct * 100) + ' %'); } return; }
+    const d = cardData(); if (d.cruiseM == null) return;
+    const pf = SIM.perf(), FT = SIM.FT, altFt = P.y / FT, ias = P.ias / SIM.KT, mach = P.mach || 0, FL = Math.round(d.cruiseFt / 100), dAlt = P.y - d.cruiseM;
+    // altitude
+    let aC, aT;
+    if (P.onGround) { aC = ''; aT = `croisière prévue FL${FL}`; }
+    else if (d.ph === 'Montée') { aC = 'c'; aT = `↑ FL${Math.round(altFt / 100)} → FL${FL} · ${km1(-dAlt)} km`; }
+    else if (d.ph === 'Croisière') { const e = Math.abs(dAlt); aC = e < 100 ? 'g' : e < 300 ? 'a' : 'r'; aT = e < 100 ? `FL${FL} tenu ✓` : `écart ${dAlt > 0 ? '+' : '−'}${Math.round(e / FT)} ft`; }
+    else { aC = 'c'; aT = `↓ ${Math.round(altFt).toLocaleString('fr-FR')} ft`; }
+    // vitesse
+    let sC, sT; const hi = altFt > 25000, tgtKt = altFt < 10000 ? 250 : 290;
+    if (P.onGround) { sC = ''; sT = `rotation à ${pf.vr} kt`; }
+    else if (P.stall || ias < d.vls * 0.92) { sC = 'r'; sT = `TROP LENT ${Math.round(ias)} kt`; }
+    else if (mach > pf.mmo || ias > 350) { sC = 'r'; sT = `SURVITESSE M${mach.toFixed(2)}`; }
+    else if (d.ph === 'Approche' || d.ph === 'Descente' && altFt < 6000) { const e = ias - d.tgt; sC = Math.abs(e) < 8 ? 'g' : Math.abs(e) < 20 ? 'a' : 'r'; sT = `${Math.round(ias)} kt · cible ${d.tgt}`; }
+    else if (hi) { const e = mach - pf.mach; sC = Math.abs(e) < 0.02 ? 'g' : Math.abs(e) < 0.05 ? 'a' : 'c'; sT = `M${mach.toFixed(2)} · cible M${pf.mach}`; }
+    else { const e = ias - tgtKt; sC = Math.abs(e) < 12 ? 'g' : Math.abs(e) < 30 ? 'a' : 'c'; sT = `${Math.round(ias)} kt · cible ${tgtKt}`; }
+    // descente
+    let dC, dT; const toTd = d.rem - d.tdKm;
+    if (P.onGround) { dC = ''; dT = `début à ${Math.round(d.tdKm)} km de l'arrivée`; }
+    else if (toTd > 30) { dC = ''; dT = `dans ${Math.round(toTd)} km`; }
+    else if (toTd > 0) { dC = 'a'; dT = `préparez-vous : ${Math.round(toTd)} km`; }
+    else if (d.ph !== 'Approche' && altFt > 12000 && P.vs > -3) { dC = 'r'; dT = 'DESCENDEZ MAINTENANT'; }
+    else { dC = 'c'; dT = `en descente · ${Math.round(d.rem)} km`; }
+    // carburant
+    const fC = pct < 0.1 ? 'r' : pct < 0.25 ? 'a' : 'g', fT = `${Math.round(pct * 100)} % · ${fuel >= 10000 ? (fuel / 1000).toFixed(1) + ' t' : Math.round(fuel) + ' kg'}`;
+    if (dispPref.sig !== false) { setSig('sgAlt', aC, aT); setSig('sgSpd', sC, sT); setSig('sgDes', dC, dT); setSig('sgFuel', fC, fT); }
+    // bandeaux vifs à chaque changement important
+    const ev = (k, on, cls, txt, sub) => { if (on && !sigPrev[k]) banner(cls, txt, sub, true); sigPrev[k] = on; };
+    if (!P.onGround) {
+      ev('k1000', d.ph === 'Montée' && -dAlt < 1000 * FT && -dAlt > 200, 'c', `⬆ 1 000 FT AVANT LE PALIER · FL${FL}`, 'Réduisez la montée pour vous stabiliser en douceur');
+      ev('cruiseAlt', Math.abs(dAlt) < 100 && d.rem > d.tdKm, 'g', `✈ ALTITUDE DE CROISIÈRE ATTEINTE · FL${FL}`, `${km1(d.cruiseM)} km · visez Mach ${pf.mach}`);
+      ev('cruiseSpd', hi && Math.abs(mach - pf.mach) < 0.015 && Math.abs(dAlt) < 300, 'g', `⚡ VITESSE DE CROISIÈRE · MACH ${pf.mach}`, `≈ ${Math.round(pf.mach * 573)} kt · gardez ce régime`);
+      ev('altDev', d.ph === 'Croisière' && Math.abs(dAlt) > 300, 'a', `⚠ ÉCART D'ALTITUDE ${dAlt > 0 ? '+' : '−'}${Math.round(Math.abs(dAlt) / FT)} FT`, `Revenez au FL${FL}`);
+      ev('tod', toTd <= 0 && d.rem > 20, 'a', '⬇ DÉBUT DE DESCENTE', `Descendez vers ${SIM.route.dest.city} · ${Math.round(d.rem)} km restants`);
+      ev('over', sC === 'r' && mach > pf.mmo * 0.98, 'r', '⛔ SURVITESSE · RÉDUISEZ', `Mach ${mach.toFixed(2)} (max ${pf.mmo})`);
+      ev('slow', sC === 'r' && (P.stall || ias < d.vls * 0.92), 'r', '⛔ VITESSE TROP FAIBLE', 'Gaz ! Nez légèrement en bas');
+      ev('final', d.ph === 'Approche' && P.agl / FT < 3000 && d.rem < 15, 'c', `🛬 FINALE · VISEZ ${d.tgt} KT`, `minimum ${d.vls} kt · train sorti · volets FULL`);
+    }
+    ev('fuel25', pct < 0.25 && !P.onGround, 'a', '⛽ CARBURANT BAS · 25 %', 'Prévoyez l\'atterrissage ou une escale');
+    ev('fuel10', pct < 0.1 && !P.onGround, 'r', '⛽ CARBURANT CRITIQUE · 10 %', 'Posez-vous tout de suite');
   }
   // ---------- Annonces radio-sonde ----------
   let lastRA = 1e9;
@@ -565,14 +828,15 @@
   setHour(9);
   doReset();
   SIM.world.terrain.rebuild(P.x, P.z);
-  let last = performance.now(), t = 0, hudT = 0, ndT = 0, gT = 0, trailT = 0;
+  let last = performance.now(), t = 0, hudT = 0, sigT = 0, ndT = 0, gT = 0, trailT = 0;
   function frame(now) {
     const rdt = Math.min((now - last) / 1000, 0.1); last = now; t += rdt;
     readInputs(rdt);
     const dt = rdt * (P.crashed ? 1 : SIM.timeScale);
     if (!SIM.war.truckMode) SIM.stepSim(dt);
+    SIM.collide.update(rdt);
     V.syncPlane(rdt, t);
-    V.updateCamera(rdt); if (!SIM.war.truckCamera(V.cam)) SIM.troops.camera(V.cam); SIM.nature.update(V.cam);
+    V.updateCamera(rdt); if (!SIM.war.truckCamera(V.cam)) SIM.troops.camera(V.cam); SIM.nature.update(V.cam); SIM.city.update(V.cam); SIM.landmarks.update(V.cam); SIM.roads.update(V.cam);
     const strike = SIM.updateWorld(rdt, t, V.cam, P);
     if (strike && !P.onGround && P.birdCD <= 0) { P.birdCD = 20; toast('Impact aviaire ! Pas de dégâts.'); V.say('Impact aviaire'); }
     P.birdCD -= rdt;
@@ -582,6 +846,7 @@
     // sillage d'écume quand l'avion glisse sur l'eau
     if (P.onGround && P.surf && P.surf.type === 'eau' && P.V > 3 && !P.crashed) { V.sprayT = (V.sprayT || 0) - rdt; if (V.sprayT <= 0) { V.sprayT = 0.06; const wl = SIM.waterAt(P.x, P.z) || 0, b = 6 + Math.random() * 6; SIM.boom.puff(P.x - Math.sin(P.psi) * b + (Math.random() - 0.5) * 8, wl + 0.4, P.z + Math.cos(P.psi) * b + (Math.random() - 0.5) * 8, 2 + P.V * 0.06, 1.4, 'spray'); } }
     trailT += dt; if (trailT > 2) { trailT = 0; V.trail.push([P.x, P.z]); if (V.trail.length > 3000) V.trail.shift(); }
+    sigT += rdt; if (sigT > 0.1) { sigUpdate(sigT); sigT = 0; }
     hudT += rdt; if (hudT > 0.08) { hudT = 0; V.updateHUD(); refreshPanel(); callouts(); speedCalls(); }
     ndT += rdt; if (ndT > 0.12) { ndT = 0; V.drawND(); }
     if (V.myBoard && V.myBoard.done >= V.myBoard.people.length && !V.myBoard.fin) {

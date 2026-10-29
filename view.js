@@ -10,7 +10,7 @@
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const scene = SIM.scene = new THREE.Scene();
     V.cam = new THREE.PerspectiveCamera(60, 1, 0.3, 450000);
-    SIM.initWorld(scene); SIM.initAirports(scene); SIM.ai.init(scene); SIM.nature.init(scene); SIM.life.init(scene); SIM.boom.init(scene);
+    SIM.initWorld(scene); SIM.initAirports(scene); SIM.ai.init(scene); SIM.nature.init(scene); SIM.city.init(scene); SIM.landmarks.init(scene); SIM.roads.init(scene); SIM.life.init(scene); SIM.boom.init(scene);
     V.plane = SIM.buildAircraft('sanaga'); scene.add(V.plane.root);
     V.plane.root.rotation.order = 'YXZ'; V.cockpit = SIM.buildCockpit(V.plane);
     V.myLiv = 'sanaga'; V.myType = 'A320';
@@ -30,7 +30,20 @@
     const m = SIM.life.heliModel(kind), root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.add(m); root.rotation.order = 'YXZ';
     const u = m.userData;
     return { root, body, mats: {}, engs: [], gear: {}, lt: {}, simple: false, heli: true, flames: [],
-      eye: u.eye, update(s) { const n = (s.n1[0] + s.n1[1]) / 2; u.rot.rotation.y += n * 30 * s.dt; u.tr.rotation.x += n * 65 * s.dt; u.bea.visible = (s.t % 1) < 0.15; u.disc.material.opacity = n * 0.13; } };
+      eye: u.eye, update(s) { const n = (s.n1[0] + s.n1[1]) / 2; u.rot.rotation.y += n * 30 * s.dt; u.tr.rotation.x += n * 65 * s.dt; u.bea.visible = (s.t % 1) < 0.15; u.disc.material.opacity = n * 0.13;
+        // réalisme : pales qui s'affaissent à l'arrêt et se relèvent (conicité) sous la charge ; disque rotor qui s'incline dans le sens du cyclique
+        const load = P.onGround ? Math.max(0, (P.lift || 0)) * 0.6 : 1 + clamp(P.hvy || 0, -4, 6) * 0.06, spin = clamp(n / 0.6, 0, 1);
+        const flap = 0.07 * (1 - spin) - 0.045 * spin * load + Math.sin(s.t * 4.6) * 0.004 * spin;
+        if (u.blades) u.blades.forEach((b, i) => { b.rotation.x += (flap + (i % 2 ? 0.003 : -0.003) * spin - b.rotation.x) * Math.min(1, s.dt * 4); });
+        u.rot.rotation.x += (clamp(P.stickY || 0, -1, 1) * 0.07 - u.rot.rotation.x) * Math.min(1, s.dt * 3);
+        u.rot.rotation.z += (-clamp(P.stickX || 0, -1, 1) * 0.06 - u.rot.rotation.z) * Math.min(1, s.dt * 3);
+        // souffle du rotor : poussière ou embruns soulevés près du sol
+        const wl = SIM.waterAt(P.x, P.z), gh = SIM.groundH(P.x, P.z), base = wl !== null ? Math.max(gh, wl) : gh, agl = P.y - base;
+        u.dw = (u.dw || 0) - s.dt;
+        if (n > 0.5 && agl < 28 && u.dw <= 0 && SIM.boom) { u.dw = 0.08 + agl * 0.006; const k = 1 - agl / 28;
+          for (let i = 0; i < 2; i++) { const a = Math.random() * 6.28, r = 4 + Math.random() * 9 * (0.6 + k);
+            SIM.boom.puff(P.x + Math.cos(a) * r, base + 0.6, P.z + Math.sin(a) * r, (2.5 + Math.random() * 3) * (0.5 + k), 1.6 + Math.random(), wl !== null && wl >= gh ? 'spray' : 'dust'); } }
+      } };
   }
   V.rebuildPlayer = function (liv, type) {
     const wasIn = V.cockpit.g.visible;
@@ -81,6 +94,7 @@
     const yaw = V.camYaw + o.yaw, z = o.zoom;
     const aroundAt = (back, hgt, side, look) => {
       if (P.heli && V.view !== 'commandant' && V.view !== 'cockpitLarge') { back *= 0.36; hgt *= 0.36; side *= 0.36; }
+      else if (!V.inside() && SIM.tyx) { const k = clamp((SIM.tyx().half || 17) / 30, 1, 3.2); back *= k; hgt *= k; side *= k; look = (look || 4) * k; }   // gros avions : caméra plus loin pour voir toute la queue
       const sy = Math.sin(yaw), cy = Math.cos(yaw);
       const dir = new THREE.Vector3(sy, 0, -cy), right = new THREE.Vector3(cy, 0, sy);
       const p = pos.clone().addScaledVector(dir, -back * z).addScaledVector(right, side * z); p.y += hgt * z + Math.sin(o.pitch) * back * z;
@@ -149,29 +163,38 @@
   // ---------- Avion visuel ----------
   V.syncPlane = function (dt, t) {
     const R = V.plane.root;
-    R.position.set(P.x, P.y, P.z); R.rotation.set(P.theta, -P.psi, -P.phi, 'YXZ');
+    // avions très longs : près du sol, l'assiette affichée est limitée pour que la queue ne s'enfonce pas dans la piste (comme un vrai pilote qui évite de « frotter la queue »)
+    let thV = P.theta + (P.onGround && !P.heli ? P.gTh || 0 : 0);
+    if (!P.heli && V.plane.body && thV > 0) { const sc = V.plane.body.scale, arm = 18 * sc.z, clr = 3.3 * sc.y, agl = Math.max(0, P.y - SIM.groundH(P.x, P.z)); thV = Math.min(thV, Math.atan((clr + agl) / arm)); }
+    R.position.set(P.x, P.y, P.z); R.rotation.set(thV, -P.psi, -(P.phi + (P.onGround && !P.heli ? P.gPhi || 0 : 0)), 'YXZ');
     // poids de l'avion : écrasement des amortisseurs au toucher puis rebonds amortis, vibrations au roulage
     if (V.td) { V.td.t += dt; const k = Math.exp(-V.td.t * 3.2); R.position.y -= V.td.amp * k * Math.cos(V.td.t * 13); R.rotation.x += V.td.amp * 0.05 * k * Math.sin(V.td.t * 11); R.rotation.z += V.td.amp * 0.03 * k * Math.sin(V.td.t * 9); if (V.td.t > 2.5) V.td = null; }
-    if (P.onGround && P.V > 3 && !P.crashed) { const r = Math.min(P.V / 70, 1) * (SIM.surface(P.x, P.z).type === 'herbe' ? 3 : 1); R.position.y += (Math.random() - 0.5) * 0.035 * r; R.rotation.x += (Math.random() - 0.5) * 0.0025 * r; }
+    if (P.onGround && P.V > 3 && !P.crashed) { const st = P.surf ? P.surf.type : 'piste', r = Math.min(P.V / 70, 1) * (st === 'foret' ? 8 : st === 'herbe' ? 3 : st === 'route' ? 1.6 : 1); R.position.y += (Math.random() - 0.5) * 0.035 * r; R.rotation.x += (Math.random() - 0.5) * 0.0025 * r; }
     if (P.crashed) {
       if (P.crashKind === 'eau') { P.crashY -= dt * 0.12; R.position.y = Math.max(P.crashY, P.y - 9); }
       else { if (P.visY == null) P.visY = V.visGround(P.x, P.z); R.position.y = P.visY - 0.6; }
       R.rotation.set(-0.12, -P.psi, -(P.crashPhi || 0.3), 'YXZ');
     }
+    // porte avant : elle s'ouvre pendant l'embarquement / le débarquement, puis se referme
+    if (V.plane.setDoor) {
+      const want = V.myBoard && !V.myBoard.fin && P.onGround && P.V < 1 ? 1 : 0;
+      V.plane.cabinK = (V.plane.cabinK || 0) + clamp(want - (V.plane.cabinK || 0), -dt * 0.4, dt * 0.4);
+      V.plane.setDoor(V.plane.cabinK);
+    }
     R.updateMatrixWorld(true);
     const ap = P.ap, aerr = ap.on && !P.onGround ? clamp((P.apPhiErr || 0) * 3, -1, 1) : P.stickX;
-    V.wheelV = P.onGround ? P.V : (V.wheelV || 0) * Math.max(0, 1 - dt * 0.3);
+    V.wheelV = P.onGround ? P.V + (P.bV || 0) : (V.wheelV || 0) * Math.max(0, 1 - dt * 0.3);
     V.cockpit.update(dt, t, P);
     // flammes de postcombustion en hypervitesse
     if (!V.plane.flames) V.plane.flames = V.plane.engs.map(e => { const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: SIM.glowTex('rgba(255,240,200,1)', 'rgba(255,90,20,0)'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); f.position.set(0, 0, 4.2); e.add(f); const c = new THREE.Sprite(new THREE.SpriteMaterial({ map: SIM.glowTex('rgba(150,200,255,1)', 'rgba(60,120,255,0)'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); c.position.set(0, 0, 3.1); e.add(c); return [f, c]; });
     const fl = P.turbo && P.thr > 0.2 && !P.crashed; V.plane.flames.forEach(([f, c]) => { f.visible = c.visible = fl; if (fl) { const k = 0.85 + Math.random() * 0.3; f.scale.set(3.2 * k * (0.6 + P.thr), 3.2 * k * (0.6 + P.thr), 1); f.position.z = 3.6 + P.thr * 1.6 * k; c.scale.setScalar(1.8 * k); } });
     V.plane.update({ flapPos: P.flapPos, ail: aerr, elev: P.stickY, rud: P.onGround ? P.steer / (60 * D2R) : P.rudder, spoil: P.spoilPos,
-      gearPos: P.crashed ? Math.min(P.gearPos, 0.25) : P.gearPos, n1: P.n1, wheelV: V.wheelV, steer: P.steer, ab: P.ab || P.turbo, dt, t, night: SIM.world.night, lights: P.lights });
+      gearPos: P.crashed ? Math.min(P.gearPos, 0.25) : P.gearPos, n1: P.n1, wheelV: V.wheelV, steer: P.steer, ab: P.ab || P.turbo, rev: P.rev && P.onGround ? (P.revAmt == null ? 1 : P.revAmt) : 0, dt, t, night: SIM.world.night, lights: P.lights });
     const gh = SIM.groundH(P.x, P.z), agl = P.y - gh;
     V.shadow.visible = agl < 400 && !SIM.isSea(P.x, P.z) && !P.crashed && V.plane.root.visible;
     if (V.shadow.visible) {
       const s = SIM.world.sunDir, off = Math.min(agl / Math.max(s.y, 0.25), 400);
-      V.shadow.position.set(P.x - s.x * off, gh + 0.3, P.z - s.z * off); V.shadow.rotation.y = -P.psi;
+      V.shadow.position.set(P.x - s.x * off, gh + 0.3, P.z - s.z * off); V.shadow.rotation.y = -P.psi; if (V.plane.body && !P.heli) V.shadow.scale.set(Math.max(0.4, (SIM.tyx().half || 17) / 17), 1, V.plane.body.scale.z); else V.shadow.scale.set(1, 1, 1);   // l'ombre a la taille réelle de l'avion
       V.shadow.material.opacity = 0.42 * (1 - agl / 400) * (1 - SIM.world.night);
     }
   };
@@ -194,9 +217,125 @@
   V.touchdown = function (vs) {
     const amp = clamp(-vs / 500 * 0.32, 0.12, 0.8);
     V.td = { t: 0, amp }; V.shakeT = 0.35 + amp * 0.9; V.boomSound(0.18 + amp * 0.5);
+    V.chirp(0.7 + amp); V.markT = 0.6;                                                  // crissement et traces de gomme au toucher
+    if (P.surf && !['eau', 'mer'].includes(P.surf.type)) { const c = Math.cos(P.psi), s = Math.sin(P.psi); for (const sx of [-1, 1]) SIM.boom.puff(P.x + c * sx * 3.8, P.y + 0.5, P.z + s * sx * 3.8, 3 + amp * 3, 1.8, 'tire'); }
+    // atterrissage trop dur : l'écran et l'avion rougissent un instant (plus c'est dur, plus c'est rouge)
+    const k = clamp((-vs - 350) / 900, 0, 1);
+    if (k > 0) {
+      V.redK = 0.3 + 0.7 * k; V.redT = 0;
+      const el = document.getElementById('tdFlash'); if (el) { el.style.transition = 'none'; el.style.opacity = (0.25 + 0.55 * k).toFixed(2); void el.offsetWidth; el.style.transition = 'opacity 1.6s ease-out'; el.style.opacity = '0'; }
+    }
+  };
+  // teinte rouge de l'avion qui s'estompe après un toucher brutal
+  const redCol = new THREE.Color(0xff1a00);
+  V.updateRed = function (dt) {
+    if (!V.redK || !V.plane) return;
+    V.redT += dt; const a = V.redK * Math.max(0, 1 - V.redT / 1.8) * (0.75 + 0.25 * Math.cos(V.redT * 14));
+    V.plane.root.traverse(o => {
+      if (!o.isMesh) return; const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach(m => { if (!m || !m.emissive) return; if (!m.userData.em0) m.userData.em0 = m.emissive.clone(); m.emissive.copy(m.userData.em0).lerp(redCol, a * 0.55); });
+    });
+    if (V.redT > 1.8) { V.redK = 0; V.plane.root.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m && m.userData.em0) { m.emissive.copy(m.userData.em0); delete m.userData.em0; } }); }); }
   };
   V.clearFx = function () { SIM.boom.clear(); if (V.plane) V.plane.root.visible = true; };
-  V.updateFx = function (dt) { SIM.boom.update(dt); };
+  // fumée des réacteurs abîmés : légère et grise au début, noire et épaisse quand c'est grave
+  const ev3 = new THREE.Vector3();
+  V.engSmoke = function (dt) {
+    if (!P.dmg || P.crashed || !V.plane) return;
+    V.smT = V.smT || [0, 0];
+    for (let i = 0; i < 2; i++) {
+      const d = P.dmg[i]; if (d < 0.02) continue;
+      V.smT[i] -= dt; if (V.smT[i] > 0) continue; V.smT[i] = 0.09 / (0.35 + d);
+      const E = V.plane.engs || [], list = E.length >= 4 ? (i === 0 ? [E[1], E[3]] : [E[0], E[2]]) : E.length === 2 ? [E[i === 0 ? 1 : 0]] : [];
+      const pts = list.length ? list.map(e => { e.getWorldPosition(ev3); return ev3.clone(); }) : [new THREE.Vector3(P.x, P.y + 3, P.z)];
+      pts.forEach(p => {
+        const back = 4 + Math.random() * 3, fx = Math.sin(P.psi), fz = -Math.cos(P.psi);
+        SIM.boom.puff(p.x - fx * back, p.y + 0.3, p.z - fz * back, 2.2 + d * 6 + Math.random() * 1.5, 2.2 + d * 4, d > 0.6 ? 'smoke' : 'grey');
+        if (d > 0.75 && P.eng[i] && Math.random() < 0.4) SIM.boom.puff(p.x - fx * 2.5, p.y, p.z - fz * 2.5, 1.6 + Math.random(), 0.25, 'fire');
+      });
+    }
+  };
+  // ---------- Traces de pneus (freinage, dérapage, toucher) ----------
+  const MK = 1500; let mkGeo = null, mkN = 0, mkLast = [null, null];
+  function markInit() {
+    mkGeo = new THREE.BufferGeometry(); mkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MK * 18), 3)); mkGeo.setDrawRange(0, 0);
+    const m = new THREE.Mesh(mkGeo, new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
+    m.frustumCulled = false; m.renderOrder = 2; SIM.scene.add(m);
+  }
+  function markSeg(a, b, w) {
+    if (!mkGeo) markInit();
+    const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1, nx = -dz / L * w / 2, nz = dx / L * w / 2, ya = a.y + 0.06, yb = b.y + 0.06;
+    const arr = mkGeo.attributes.position.array, o = (mkN % MK) * 18;
+    arr.set([a.x - nx, ya, a.z - nz, b.x - nx, yb, b.z - nz, b.x + nx, yb, b.z + nz, a.x - nx, ya, a.z - nz, b.x + nx, yb, b.z + nz, a.x + nx, ya, a.z + nz], o);
+    mkN++; mkGeo.setDrawRange(0, Math.min(mkN, MK) * 6); mkGeo.attributes.position.needsUpdate = true;
+  }
+  V.markCount = () => mkN;
+  V.marks = function (dt) {
+    if (V.markT > 0) V.markT -= dt;
+    const surf = P.surf ? P.surf.type : 'piste', hard = !['eau', 'mer'].includes(surf);
+    const braking = P.onGround && P.V > 6 && !P.crashed && hard && ((P.brake || P.brakeMax || P.abActive) && P.V > 12 || V.skidOn > 0 || V.markT > 0);
+    if (V.skidOn > 0) V.skidOn -= dt;
+    if (!braking) { mkLast = [null, null]; return; }
+    const tx = SIM.tyx ? SIM.tyx() : { half: 17 }, sxw = tx.half > 25 ? 5.5 : P.type === 'jet' ? 1.6 : P.type === 'chasseur' ? 1.4 : 3.8, c = Math.cos(P.psi), s = Math.sin(P.psi);
+    [-1, 1].forEach((sd, i) => {
+      const p = { x: P.x + c * sd * sxw - Math.sin(P.psi) * 0.5, z: P.z + s * sd * sxw + Math.cos(P.psi) * 0.5 }; p.y = SIM.groundH(p.x, p.z);
+      p.y = Math.max(p.y + 0.12, P.y + 0.04);
+      const l = mkLast[i]; if (!l) { mkLast[i] = p; return; }
+      if (Math.hypot(p.x - l.x, p.z - l.z) > 1.2) { markSeg(l, p, P.brakeMax ? 1.3 : 1.0); mkLast[i] = p; }
+    });
+  };
+  // ---------- Bruit des pneus et crissements ----------
+  V.chirp = function (k) { V.chirpK = Math.max(V.chirpK || 0, k); };
+  V.tireSound = function (dt) {
+    const A = V.audio; if (!A) return;
+    if (!A.tire) {
+      const ctx = A.ctx, buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const mk = (f, type, q) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; if (q) fl.Q.value = q; const g = ctx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(ctx.destination); s.start(); return { g, fl }; };
+      A.tire = mk(160, 'lowpass'); A.screech = mk(1900, 'bandpass', 9); A.rough = mk(420, 'bandpass', 1.2);
+    }
+    const t = A.ctx.currentTime, inside = V.inside(), st = P.surf ? P.surf.type : 'piste', on = P.onGround && !P.crashed, sp = Math.abs(P.V + (P.bV || 0));
+    const rough = st === 'foret' ? 1 : st === 'herbe' ? 0.6 : st === 'route' ? 0.25 : 0;
+    // roulement : grondement qui monte avec la vitesse, coups réguliers des joints de piste
+    V.jointT = (V.jointT || 0) + sp * dt; let thump = 0; if (V.jointT > 7.5 && sp > 3) { V.jointT = 0; thump = 0.25; }
+    A.tire.g.gain.setTargetAtTime(on ? clamp(sp / 60, 0, 1) * (inside ? 0.35 : 0.6) + thump * (inside ? 0.5 : 0.8) : 0, t, thump ? 0.01 : 0.12);
+    A.tire.fl.frequency.setTargetAtTime(90 + sp * 4, t, 0.2);
+    A.rough.g.gain.setTargetAtTime(on ? rough * clamp(sp / 25, 0, 1) * 0.55 : 0, t, 0.1);
+    // crissement : toucher, dérapage, freinage d'urgence
+    const brk = on && sp > 8 && (P.brakeMax ? 0.5 : 0) + (V.skidOn > 0 ? 0.6 : 0);
+    V.chirpK = Math.max(0, (V.chirpK || 0) - dt * 2.2);
+    A.screech.g.gain.setTargetAtTime((brk + V.chirpK) * 0.22 * (rough ? 0.3 : 1), t, 0.03);
+    A.screech.fl.frequency.setTargetAtTime(1500 + Math.random() * 700, t, 0.05);
+  };
+  // ---------- Hypervitesse : longue traînée de feu et de fumée · traînées de condensation en altitude ----------
+  const tv = new THREE.Vector3();
+  V.trails = function (dt) {
+    if (!V.plane || P.crashed || P.heli) return;
+    const E = (V.plane.engs || []).length ? V.plane.engs : [V.plane.body], fx = Math.sin(P.psi), fz = -Math.cos(P.psi);
+    if (P.turbo && P.thr > 0.2 && P.eng.some(e => e)) {
+      V.hyT = (V.hyT || 0) - dt; if (V.hyT <= 0) { V.hyT = 0.03;
+        E.forEach(e => { e.getWorldPosition(tv); const b = 6 + Math.random() * 3; SIM.boom.puff(tv.x - fx * b, tv.y, tv.z - fz * b, 3 + Math.random() * 2.5, 0.5 + Math.random() * 0.3, 'fire'); SIM.boom.puff(tv.x - fx * (b + 10), tv.y + 0.5, tv.z - fz * (b + 10), 4 + Math.random() * 3, 3.5, 'smoke'); });
+      }
+    } else if (P.y > 7800 && !P.onGround && SIM.world.weather < 3) {
+      V.ctT = (V.ctT || 0) - dt; if (V.ctT <= 0) { V.ctT = 0.14;
+        E.forEach(e => { e.getWorldPosition(tv); SIM.boom.puff(tv.x - fx * 30, tv.y, tv.z - fz * 30, 3.5, 14, 'tire'); });
+      }
+    }
+  };
+  V.updateFx = function (dt) { SIM.boom.update(dt); V.updateRed(dt); V.engSmoke(dt); V.marks(dt); V.tireSound(dt); V.trails(dt); V.realFx(dt); };
+  // réalisme : tremblement avant le décrochage (buffeting), condensation sur l'extrados en virage serré / grande incidence / air humide
+  const _wp = new THREE.Vector3();
+  V.realFx = function (dt) {
+    if (!V.plane || P.crashed || P.heli || P.onGround) return;
+    const m = P.aMargin == null ? 1 : P.aMargin / D2R;
+    if (m < 3 && P.V > 30) V.shakeT = Math.max(V.shakeT || 0, 0.12 * (3 - m) / 3 + 0.03);
+    const humid = (SIM.world.weather || 0) >= 1, vap = (P.nz || 1) > 1.7 || (m < 4 && P.V > 60) || (humid && P.flapPos > 0.4 && P.agl < 1500 && P.V > 55);
+    V.vapT = (V.vapT || 0) - dt;
+    if (vap && V.vapT <= 0 && V.plane.body) {
+      V.vapT = 0.05; const sc = V.plane.body.scale, k = clamp(((P.nz || 1) - 1.4) / 1.5 + (4 - m) / 6, 0.3, 1.2);
+      for (const sx of [-1, 1]) for (const xx of [4.5, 8.5, 12.5]) { _wp.set(sx * xx, 3.0 + xx * 0.05, -1.5 + xx * 0.4); V.plane.body.localToWorld(_wp);
+        SIM.boom.puff(_wp.x, _wp.y + 0.8 * sc.y, _wp.z, (1.6 + Math.random()) * sc.x * k, 0.35, 'spray'); }
+    }
+  };
   V.boomSound = function (k) {
     const A = V.audio; if (!A) return; const c = A.ctx, t = c.currentTime, n = c.createBufferSource(), len = c.sampleRate * 3;
     const buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
@@ -258,7 +397,7 @@
     set($('fmaAppr'), ap.appr ? (ap.gs ? 'LAND' : 'APPR ARM') : ap.full ? 'MANAGED' : '—'); cls($('fmaAppr'), ap.appr ? (ap.gs ? '' : 'arm') : ap.full ? '' : 'off');
     set($('fmaEng'), (ap.on ? 'AP1 ' : 'AP OFF ') + (ap.athr ? 'A/THR' : '')); cls($('fmaEng'), ap.on ? '' : 'off');
     // ECAM
-    const n1 = P.n1.map(n => (n * 100).toFixed(1)), dist = SIM.routeRemaining() / 1000, gs = P.V * Math.cos(P.gamma);
+    const n1 = P.n1.map(n => (n * 100).toFixed(1)), dist = SIM.routeRemaining() / 1000, gs = !P.onGround && P.gs != null && !P.heli ? P.gs : P.V * Math.cos(P.gamma), wnd = SIM.windAt ? SIM.windAt(P.y, P.tSim) : null;
     const eta = gs > 20 ? dist * 1000 / gs / 60 : 0;
     const g = (k, v, c) => `<span class="k">${k}</span> <span class="${c || 'g'}">${v}</span><br>`;
     const ec = g('N1', n1.join('  '), P.n1.some(n => n > 1.001) ? 'a' : 'g') + g('MOTEURS', P.eng.map(x => x ? 'ON' : 'OFF').join(' '), P.eng.every(x => x) ? 'g' : 'a')
@@ -267,7 +406,9 @@
       + g('AÉROFREINS', P.spoilPos > 0.02 ? Math.round(P.spoilPos * 100) + ' %' : P.spoilArm ? 'ARM' : '—', P.spoilPos > 0.02 ? 'a' : 'c')
       + g('FREINS', P.pbrk ? 'PARC' : P.brake ? 'MAN' : P.abActive ? 'AUTO ACTIF' : 'AUTO ' + ['OFF', 'LO', 'MED', 'MAX'][P.autobrake], P.pbrk ? 'a' : 'g')
       + (P.agl < 760 && !P.onGround ? g('RADIO ALT', Math.round(P.agl / FT) + ' ft', 'g') : '')
-      + g('MACH', P.mach.toFixed(2)) + g('GS / TAS', Math.round(gs / KT) + ' / ' + Math.round(P.V / KT) + ' kt')
+      + g('CARBURANT', P.fuel != null ? (P.fuel / 1000).toFixed(1) + ' t · ' + Math.round((P.ff || 0) * 3600) + ' kg/h' : '—', P.fuel != null && P.fuelCap && P.fuel / P.fuelCap < 0.1 ? 'r' : 'g')
+      + (P.dmg && (P.dmg[0] > 0.01 || P.dmg[1] > 0.01) ? g('PANNE', P.dmg.map((d, i) => d > 0.01 ? 'M' + (i + 1) + (d >= 1 ? ' ARRÊT' : ' FUMÉE') : '').filter(x => x).join(' · '), 'r') : '')
+      + (wnd ? g('VENT', String(Math.round(wnd.dir / 10) * 10 || 360).padStart(3, '0') + '° / ' + Math.round(wnd.kt) + ' kt' + (SIM.wind.gust && P.agl < 900 ? ' raf. ' + SIM.wind.gust : ''), 'c') : '') + g('MACH', P.mach.toFixed(2)) + g('GS / TAS', Math.round(gs / KT) + ' / ' + Math.round(P.V / KT) + ' kt')
       + g('VERS ' + R.dest.id, Math.round(dist) + ' km' + (eta ? ' · ' + Math.round(eta) + ' min' : ''), 'c')
       + (SIM.timeScale > 1 ? g('TEMPS', '×' + SIM.timeScale, 'a') : '');
     if ($('ecam')._v !== ec) { $('ecam')._v = ec; $('ecam').innerHTML = ec; }
@@ -413,8 +554,25 @@
     }
     if (drops.length > 600) drops.splice(0, drops.length - 600);
   };
+  // voix : on choisit explicitement une vraie voix anglaise pour l'anglais et une voix française pour le français
+  // (sinon certains navigateurs lisent l'anglais avec la voix française)
+  let VOICES = [];
+  const loadVoices = () => { try { VOICES = speechSynthesis.getVoices() || []; } catch (e) { VOICES = []; } };
+  if (window.speechSynthesis) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) { } }
+  function pickVoice(lang) {
+    if (!VOICES.length) loadVoices();
+    const pre = lang.slice(0, 2).toLowerCase(), list = VOICES.filter(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith(pre));
+    if (!list.length) return null;
+    const pref = pre === 'en' ? [/en-us/i, /en-gb/i, /google us english/i, /zira|david|mark|aria|jenny|guy/i] : [/fr-fr/i, /google fran/i, /hortense|julie|paul|denise|henri/i];
+    for (const r of pref) { const v = list.find(v => r.test(v.lang) || r.test(v.name)); if (v) return v; }
+    return list[0];
+  }
+  V.hasEnglishVoice = () => !!pickVoice('en-US');
   V.say = function (txt, lang, pitch, rate) {
     if (!V.audio || !window.speechSynthesis) return;
-    try { const u = new SpeechSynthesisUtterance(txt); u.lang = lang || 'fr-FR'; u.rate = rate || 1.1; u.pitch = pitch || 1; speechSynthesis.speak(u); } catch (e) { }
+    try {
+      const L = lang || 'fr-FR', u = new SpeechSynthesisUtterance(txt), v = pickVoice(L);
+      u.lang = v ? v.lang : L; if (v) u.voice = v; u.rate = rate || 1.1; u.pitch = pitch || 1; speechSynthesis.speak(u);
+    } catch (e) { }
   };
 })();

@@ -14,6 +14,24 @@
     atlas: { s: ['#0b2545', '#e0a526', '#0b2545'], fin: 0x0b2545, acc: 0xe0a526, eng: 0xf3f5f7 },
     lagune: { s: ['#f08a24', '#1b9b6f', '#f08a24'], fin: 0xf08a24, acc: 0x1b9b6f, eng: 0xf3f5f7 },
     prive: { s: ['#1a1a1a', '#b8975a', '#1a1a1a'], fin: 0x1a1a1a, acc: 0xb8975a, eng: 0x1a1a1a },
+    // livrées couleur intégrale (fuselage entièrement peint, sans blanc)
+    saphir: { s: ['#d4af37', '#f2d675', '#d4af37'], fin: 0x0a2460, acc: 0xd4af37, eng: 0x123a8c, base: '#123a8c', belly: '#0a2460' },
+    emeraude: { s: ['#d4af37', '#f2d675', '#d4af37'], fin: 0x075239, acc: 0xd4af37, eng: 0x0c7a55, base: '#0c7a55', belly: '#075239' },
+    rubis: { s: ['#c0c6cc', '#e6e9ec', '#c0c6cc'], fin: 0x6e0b1b, acc: 0xc0c6cc, eng: 0xa3132a, base: '#a3132a', belly: '#6e0b1b' },
+    champagne: { s: ['#1a1a1a', '#3a3a3a', '#1a1a1a'], fin: 0x1a1a1a, acc: 0x1a1a1a, eng: 0xc9a45a, base: '#c9a45a', belly: '#9c7c3e' },
+    nuit: { s: ['#e0338a', '#ff7ab8', '#e0338a'], fin: 0x1f133a, acc: 0xe0338a, eng: 0x33205c, base: '#33205c', belly: '#1f133a' },
+    corail: { s: ['#13284f', '#2b4c8a', '#13284f'], fin: 0x13284f, acc: 0x13284f, eng: 0xe8653f, base: '#e8653f', belly: '#b84a2b' },
+    lagon: { s: ['#ffc928', '#ffe17a', '#ffc928'], fin: 0x0b706f, acc: 0xffc928, eng: 0x119e9c, base: '#119e9c', belly: '#0b706f' },
+    graphite: { s: ['#ff7a1a', '#ffa95e', '#ff7a1a'], fin: 0x262a31, acc: 0xff7a1a, eng: 0x3a4049, base: '#3a4049', belly: '#262a31' },
+    bordeaux: { s: ['#d4af37', '#f2d675', '#d4af37'], fin: 0x3c0c1e, acc: 0xd4af37, eng: 0x5e1530, base: '#5e1530', belly: '#3c0c1e' },
+    azur: { s: ['#0d2350', '#1d3d7a', '#0d2350'], fin: 0x0d2350, acc: 0x0d2350, eng: 0x3d9be0, base: '#3d9be0', belly: '#2a74ad' },
+    mangue: { s: ['#0f6b3a', '#1f9a57', '#0f6b3a'], fin: 0x0f6b3a, acc: 0x0f6b3a, eng: 0xf2a516, base: '#f2a516', belly: '#c98407' },
+    lavande: { s: ['#1b1f4f', '#353b80', '#1b1f4f'], fin: 0x1b1f4f, acc: 0x1b1f4f, eng: 0x8b7fd0, base: '#8b7fd0', belly: '#6a5eaf' },
+    // livrées « inspirées » des couleurs de grandes compagnies (sans logo ni nom)
+    belge: { s: ['#0b1f4a', '#d71e2b', '#0b1f4a'], fin: 0x0b1f4a, acc: 0xd71e2b, eng: 0x0b1f4a, noLine: true, sw: ['#0b1f4a', '#d71e2b'], belly: '#0b1f4a' },
+    tricolore: { s: ['#002157', '#ffffff', '#e4002b'], fin: 0x002157, acc: 0xe4002b, eng: 0xf3f5f7, noLine: true, sw: ['#002157', '#e4002b'], thin: true },
+    constructeur: { s: ['#00205b', '#4fb3e6', '#00205b'], fin: 0x00205b, acc: 0x4fb3e6, eng: 0xf3f5f7, noLine: true, sw: ['#00205b', '#4fb3e6'] },
+    lion: { s: ['#007a3d', '#ce1126', '#fcd116'], fin: 0x007a3d, acc: 0xfcd116, eng: 0x007a3d, noLine: true, sw: ['#007a3d', '#ce1126', '#fcd116'] },
   };
   const ZN = -18.62, FL = 37.67;
   const PROF = [[19.05, 0], [18.9, 0.25], [18.3, 0.5], [16.8, 0.95], [14.5, 1.45], [12, 1.8], [9.5, 1.96], [8, 1.98], [-12, 1.98], [-14.2, 1.95], [-15.6, 1.82], [-16.6, 1.6], [-17.4, 1.3], [-18, 0.95], [-18.4, 0.55], [-18.62, 0]];
@@ -30,30 +48,57 @@
     for (let i = 0; i < p.count; i++) { const z = p.getZ(i); p.setY(i, p.getY(i) + CY + yOff(z)); uv.setY(i, (z - ZN) / FL); }
     g.computeVertexNormals(); return (cache.fus = g);
   }
-  function liveryTex(L) {
-    const key = 'liv' + L.s.join(); if (cache[key]) return cache[key];
+  function liveryTex(L, rows) {
+    rows = rows || 1; const key = 'r' + rows + 'liv' + L.s.join() + (L.sw ? 'w' + L.sw.join() : '') + (L.noLine ? 'n' : ''); if (cache[key]) return cache[key];
     const W = 512, H = 2048, c = document.createElement('canvas'), e = document.createElement('canvas');
     c.width = e.width = W; c.height = e.height = H;
     const x = c.getContext('2d'), y = e.getContext('2d');
     const Y = z => (1 - (z - ZN) / FL) * H, X = u => u * W;
     const both = (u0, u1, z0, z1, col, ctx) => { ctx = ctx || x; ctx.fillStyle = col; ctx.fillRect(X(u0), Y(z1), X(u1 - u0), Y(z0) - Y(z1)); ctx.fillRect(X(1 - u1), Y(z1), X(u1 - u0), Y(z0) - Y(z1)); };
     x.fillStyle = L.base || '#f3f5f7'; x.fillRect(0, 0, W, H); y.fillStyle = '#000'; y.fillRect(0, 0, W, H);
-    x.fillStyle = L.belly || '#cdd2d8'; x.fillRect(X(0.36), 0, X(0.28), H);
-    both(0.262, 0.284, -15.4, 16.5, L.s[0]); both(0.284, 0.296, -15.4, 16.5, L.s[1]); both(0.296, 0.303, -15.4, 16.5, L.s[2]);
+    x.fillStyle = L.sw ? '#cdd2d8' : (L.belly || '#cdd2d8'); x.fillRect(X(0.36), 0, X(0.28), H);
+    if (!L.noLine) { both(0.262, 0.284, -15.4, 16.5, L.s[0]); both(0.284, 0.296, -15.4, 16.5, L.s[1]); both(0.296, 0.303, -15.4, 16.5, L.s[2]); }
+    if (L.sw) {   // grande vague colorée qui monte de l'arrière du fuselage vers la dérive
+      L.sw.forEach((col, i) => { const off = i * (L.thin ? 0.022 : 0.04), z0 = 2 + i * 2.2;
+        x.fillStyle = col;
+        for (const side of [0, 1]) { const U = u => X(side ? 1 - u : u); x.beginPath(); x.moveTo(U(0), Y(z0));
+          for (let z = z0; z <= 19.1; z += 0.25) { const q = (z - z0) / (19.1 - z0); x.lineTo(U(Math.min(0.5, (L.thin ? 0.05 : 0.02) + Math.pow(q, 0.7) * 0.36 - off)), Y(z)); }
+          x.lineTo(U(0), Y(19.1)); x.closePath(); x.fill(); } });
+      if (L.belly) { x.fillStyle = L.belly; for (const side of [0, 1]) { const U = u => X(side ? 1 - u : u); x.beginPath(); x.moveTo(U(0.5), Y(-15)); for (let z = -15; z <= 19.1; z += 0.5) x.lineTo(U(0.5 - 0.1 * Math.max(0, Math.min(1, (z + 15) / 10))), Y(z)); x.lineTo(U(0.5), Y(19.1)); x.closePath(); x.fill(); } }
+    }
     x.fillStyle = L.s[0];
     for (const side of [0, 1]) { x.beginPath(); for (let z = 10; z <= 19.1; z += 0.2) { const u = 0.27 * Math.pow((z - 10) / 9, 0.8); x.lineTo(X(side ? 1 - u : u), Y(z)); } x.lineTo(X(side ? 1 : 0), Y(19.1)); x.lineTo(X(side ? 1 : 0), Y(10)); x.fill(); }
     for (let z = -12.6; z < 12.6; z += 0.533) {
       if ((z > -1.1 && z < 0.9) || L.noWin) continue;
-      both(0.202, 0.228, z - 0.12, z + 0.12, '#1c2733'); both(0.204, 0.212, z - 0.08, z + 0.08, '#3d5568');
-      both(0.202, 0.228, z - 0.12, z + 0.12, '#ffd9a0', y);
+      // hublots : certains stores sont baissés (plastique clair), les autres laissent voir la cabine éclairée la nuit
+      const shade = ((Math.sin(z * 12.9898 + L.s[0].length * 3.1) * 43758.5453) % 1 + 1) % 1 < 0.18;
+      both(0.202, 0.228, z - 0.12, z + 0.12, shade ? '#c3c8cf' : '#1c2733'); if (!shade) both(0.204, 0.212, z - 0.08, z + 0.08, '#3d5568');
+      both(0.202, 0.228, z - 0.12, z + 0.12, shade ? '#3a3122' : '#ffd9a0', y);
     }
+    // ponts supérieurs (super-jumbo, Titan) : rangées de hublots en plus
+    for (let r = 1; r < rows; r++) { const u0 = 0.202 - r * 0.042, zA = -12.6 + r * 3.2, zB = 12.6 - r * 3.4;
+      for (let z = zA; z < zB; z += 0.533) { both(u0, u0 + 0.024, z - 0.11, z + 0.11, '#1c2733'); both(u0, u0 + 0.024, z - 0.11, z + 0.11, '#ffd9a0', y); } }
     x.strokeStyle = "#9aa3ad"; x.lineWidth = 2;
-    [[-14.7, 0.82, 0.16, 0.31], [14.0, 0.82, 0.16, 0.31], [-0.8, 0.5, 0.19, 0.25], [0.35, 0.5, 0.19, 0.25]].forEach(([z, w, u0, u1]) => {
+    [[-14.7, 0.82, 0.16, 0.31], [14.0, 0.82, 0.16, 0.31], [-0.8, 0.5, 0.19, 0.25], [0.35, 0.5, 0.19, 0.25], [-9.2, 1.8, 0.312, 0.362], [7.6, 1.7, 0.312, 0.362]].forEach(([z, w, u0, u1]) => {
       for (const u of [[u0, u1], [1 - u1, 1 - u0]]) x.strokeRect(X(u[0]), Y(z + w / 2), X(u[1] - u[0]), Y(z - w / 2) - Y(z + w / 2));
     });
-    const ck = (u0, u1, z0, z1) => { both(u0, u1, z0, z1, '#121a22'); both(u0, u1, z0, z1, '#2a3a48', y); };
-    ck(0.004, 0.06, -17.25, -16.5); ck(0.066, 0.124, -17.2, -16.45); ck(0.132, 0.198, -16.4, -15.75); ck(0.205, 0.25, -16.0, -15.55);
-    x.fillStyle = '#121a22'; x.fillRect(0, Y(-16.5), X(0.004), Y(-17.25) - Y(-16.5));
+    // masque noir autour du pare-brise (comme sur les Airbus), puis 4 vitres de chaque côté avec cadres et reflets
+    for (const side of [0, 1]) {
+      const U = u => X(side ? 1 - u : u);
+      x.fillStyle = '#0b0f14'; x.beginPath();
+      x.moveTo(U(0), Y(-17.36)); x.lineTo(U(0.064), Y(-17.32)); x.lineTo(U(0.13), Y(-17.27)); x.lineTo(U(0.205), Y(-16.5)); x.lineTo(U(0.262), Y(-16.08));
+      x.lineTo(U(0.262), Y(-15.45)); x.lineTo(U(0.2), Y(-15.62)); x.lineTo(U(0.128), Y(-15.66)); x.lineTo(U(0.06), Y(-16.36)); x.lineTo(U(0), Y(-16.42)); x.closePath(); x.fill();
+    }
+    const pane = (u0, u1, z0, z1, skew) => {
+      for (const side of [0, 1]) {
+        const U = u => X(side ? 1 - u : u), gr = x.createLinearGradient(0, Y(z0), 0, Y(z1));
+        gr.addColorStop(0, '#26394b'); gr.addColorStop(0.55, '#101a24'); gr.addColorStop(1, '#3e5a72');
+        x.fillStyle = gr; x.beginPath(); x.moveTo(U(u0), Y(z0)); x.lineTo(U(u1), Y(z0 + skew)); x.lineTo(U(u1), Y(z1 + skew)); x.lineTo(U(u0), Y(z1)); x.closePath(); x.fill();
+        x.fillStyle = 'rgba(255,255,255,0.18)'; x.beginPath(); x.moveTo(U(u0 + (u1 - u0) * 0.15), Y(z1 - 0.05)); x.lineTo(U(u0 + (u1 - u0) * 0.45), Y(z1 - 0.05 + skew * 0.5)); x.lineTo(U(u0 + (u1 - u0) * 0.3), Y(z0 + 0.1)); x.closePath(); x.fill();
+        y.fillStyle = '#2a3a48'; y.beginPath(); y.moveTo(U(u0), Y(z0)); y.lineTo(U(u1), Y(z0 + skew)); y.lineTo(U(u1), Y(z1 + skew)); y.lineTo(U(u0), Y(z1)); y.closePath(); y.fill();
+      }
+    };
+    pane(0.006, 0.058, -17.25, -16.47, 0.02); pane(0.07, 0.124, -17.2, -16.42, 0.03); pane(0.136, 0.198, -16.45, -15.74, 0.08); pane(0.21, 0.254, -16.05, -15.55, 0.05);
     const t = new THREE.CanvasTexture(c), te = new THREE.CanvasTexture(e);
     t.anisotropy = te.anisotropy = 4;
     return (cache[key] = [t, te]);
@@ -63,7 +108,7 @@
   function wingPt(P, s, c, side) {
     const d = P.dih * D2R, ch = P.rc + (P.tc - P.rc) * s, sw = Math.tan(P.sweep * D2R) * s * P.span;
     const t = side ? side * 5 * P.th * (0.2969 * Math.sqrt(c) - 0.126 * c - 0.3516 * c * c + 0.2843 * c * c * c - 0.1015 * c * c * c * c) * ch : 0;
-    return new V3(P.x0 + Math.cos(d) * s * P.span - Math.sin(d) * t, P.y0 + Math.sin(d) * s * P.span + Math.cos(d) * t, P.z0 + sw + c * ch);
+    return new V3(P.x0 + Math.cos(d) * s * P.span - Math.sin(d) * t, P.y0 + Math.sin(d) * s * P.span + Math.cos(d) * t - (P.bend || 0) * s * s * P.span, P.z0 + sw + c * ch);
   }
   function wingGeom(P, trunc) {
     const cs = [0, 0.015, 0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.64].filter(c => c < trunc).concat([trunc]);
@@ -113,22 +158,76 @@
     const core = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.2, 20, 1, true).rotateX(Math.PI / 2), mats.dark); core.position.z = 2.25; g.add(core);
     const face = new THREE.Mesh(new THREE.CircleGeometry(0.8, 28).rotateY(Math.PI), mats.dark); face.position.z = -1.05; g.add(face);
     const fan = new THREE.Group(); fan.position.z = -1.12;
-    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.55, 20).rotateX(-Math.PI / 2), mats.white); sp.position.z = -0.22; fan.add(sp);
+    // cône d'entrée avec la spirale peinte (elle montre au personnel au sol que le réacteur tourne)
+    if (!cache.spinM) { const c = document.createElement('canvas'); c.width = 128; c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#f2f3f5'; x.fillRect(0, 0, 128, 128);
+      x.strokeStyle = '#111'; x.lineWidth = 14; x.lineCap = 'round'; x.beginPath(); for (let t = 0; t <= 1.001; t += 0.02) { const u = (0.15 + t * 0.55) * 128, v = (0.05 + t * 0.9) * 128; t ? x.lineTo(u, v) : x.moveTo(u, v); } x.stroke();
+      cache.spinM = new THREE.MeshPhongMaterial({ map: new THREE.CanvasTexture(c), shininess: 90, specular: 0x666666 }); }
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.55, 20).rotateX(-Math.PI / 2), cache.spinM); sp.position.z = -0.22; fan.add(sp);
     const mark = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.3), mats.dark); mark.position.set(0, 0.09, -0.2); fan.add(mark);
     if (!simple) {
       const bg = new THREE.BoxGeometry(0.11, 0.56, 0.03);
       for (let i = 0; i < 24; i++) { const b = new THREE.Mesh(bg, mats.blade); const a = i / 24 * Math.PI * 2; b.position.set(Math.sin(a) * 0.52, Math.cos(a) * 0.52, 0); b.rotation.z = -a; b.rotation.y = 0.5; fan.add(b); }
     }
     g.add(fan); g.userData.fan = fan;
+    // inverseur de poussée : le capot arrière recule et découvre les grilles (cascades) quand on inverse
+    if (!simple) {
+      const casc = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.6, 28, 1, true).rotateX(Math.PI / 2), new THREE.MeshPhongMaterial({ color: 0x1a1c20, shininess: 10, side: THREE.DoubleSide })); casc.position.z = 1.0; casc.visible = false; g.add(casc);
+      const sl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.07, 0.95, 32, 1, true).rotateX(Math.PI / 2), mats.nac); sl.position.z = 1.18; sl.visible = false; g.add(sl);
+      const seamR = new THREE.Mesh(new THREE.TorusGeometry(1.075, 0.012, 6, 32), mats.rimDark); seamR.position.z = 0.71; g.add(seamR);
+      g.userData.sleeve = sl; g.userData.casc = casc; g.userData.revK = 0;
+    }
     const pyl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.9, 4.2), mats.nac); pyl.position.set(0, 1.25, 0.6); pyl.rotation.x = -0.06; g.add(pyl);
     return g;
   }
-  function wheel(r, w, mats) {
+  // pneu d'avion : flancs arrondis, rainures de la bande de roulement, jante, freins et boulons
+  function treadTex() {
+    if (cache.tread) return cache.tread;
+    const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d');
+    x.fillStyle = '#1e1e1f'; x.fillRect(0, 0, 64, 256);
+    for (let i = 0; i < 400; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '70,70,70'},0.25)`; x.fillRect(Math.random() * 64, Math.random() * 256, 2, 2); }
+    // rainures longitudinales sur la bande de roulement (milieu du profil)
+    x.fillStyle = '#060606'; [0.36, 0.45, 0.55, 0.64].forEach(v => x.fillRect(0, v * 256 - 2, 64, 4));
+    // inscriptions grises sur les flancs
+    x.fillStyle = 'rgba(160,160,160,0.25)'; for (let k = 0; k < 4; k++) { x.fillRect(k * 16 + 3, 18, 9, 3); x.fillRect(k * 16 + 3, 235, 9, 3); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 1); return (cache.tread = t);
+  }
+  function tireGeom(r, w) {
+    const key = 'tire' + r + '_' + w; if (cache[key]) return cache[key];
+    const ri = r * 0.6, prof = [[ri, -w / 2], [r * 0.86, -w / 2], [r * 0.95, -w * 0.46], [r * 0.99, -w * 0.36], [r, -w * 0.22], [r, w * 0.22], [r * 0.99, w * 0.36], [r * 0.95, w * 0.46], [r * 0.86, w / 2], [ri, w / 2]];
+    const g = new THREE.LatheGeometry(prof.map(p => new THREE.Vector2(p[0], p[1])), 28); g.rotateZ(Math.PI / 2); g.computeVertexNormals();
+    return (cache[key] = g);
+  }
+  function wheel(r, w, mats, simple, brake) {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 22).rotateZ(Math.PI / 2), mats.tire));
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w + 0.02, 12).rotateZ(Math.PI / 2), mats.metal); g.add(hub);
-    const sp = new THREE.Mesh(new THREE.BoxGeometry(w + 0.04, r * 0.9, 0.08), mats.dark); g.add(sp);
+    g.add(new THREE.Mesh(tireGeom(r, w), mats.tire));
+    const ri = r * 0.6;
+    const rimG = cache['rim' + r + w] || (cache['rim' + r + w] = new THREE.CylinderGeometry(ri, ri, w * 0.92, 20).rotateZ(Math.PI / 2));
+    g.add(new THREE.Mesh(rimG, mats.rim));
+    if (!simple) {
+      // moyeu, capot et boulons du côté extérieur
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(ri * 0.42, ri * 0.5, w * 0.98, 14).rotateZ(Math.PI / 2), mats.metal); g.add(hub);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(ri * 0.22, 10, 6), mats.metal); cap.scale.set(0.5, 1, 1); cap.position.x = w * 0.5; g.add(cap);
+      const bg = cache.bolt || (cache.bolt = new THREE.CylinderGeometry(0.022, 0.022, 0.03, 6).rotateZ(Math.PI / 2));
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, b = new THREE.Mesh(bg, mats.dark); b.position.set(w * 0.47, Math.cos(a) * ri * 0.33, Math.sin(a) * ri * 0.33); g.add(b); }
+      // rayons de jante
+      for (let i = 0; i < 6; i++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.02, ri * 0.75, 0.05), mats.rimDark); sp.rotation.x = i / 6 * Math.PI; sp.position.x = w * 0.45; g.add(sp); }
+      if (brake) { const bd = new THREE.Mesh(new THREE.CylinderGeometry(ri * 0.85, ri * 0.85, 0.06, 18).rotateZ(Math.PI / 2), mats.brake); bd.position.x = -w * 0.38; g.add(bd); }
+    }
     return g;
+  }
+  // jambe de train réaliste : fût, tige chromée de l'amortisseur, compas, contrefiche
+  function oleo(piv, len, rTop, mats, sx, simple) {
+    const up = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rTop * 1.05, len * 0.62, 12), mats.strut); up.position.y = -len * 0.31; piv.add(up);
+    const lo = new THREE.Mesh(new THREE.CylinderGeometry(rTop * 0.72, rTop * 0.72, len * 0.42, 12), mats.chrome); lo.position.y = -len * 0.78; piv.add(lo);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(rTop * 1.25, rTop * 1.25, 0.08, 12), mats.strut); col.position.y = -len * 0.6; piv.add(col);
+    if (simple) return;
+    // compas (bras articulés devant la jambe)
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.05, len * 0.24, 0.06), mats.metal); tl.position.set(0, -len * 0.66, -rTop * 1.6); tl.rotation.x = 0.55; piv.add(tl);
+    const tl2 = tl.clone(); tl2.position.y = -len * 0.84; tl2.rotation.x = -0.55; piv.add(tl2);
+    // contrefiche latérale vers l'intérieur
+    if (sx) { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len * 0.7, 6), mats.strut); br.position.set(-sx * len * 0.22, -len * 0.3, 0); br.rotation.z = sx * 0.62; piv.add(br); }
+    // flexible hydraulique de frein
+    const hy = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, len * 0.8, 5), mats.dark); hy.position.set(rTop * 1.2, -len * 0.45, rTop * 0.6); piv.add(hy);
   }
   function glowSprite(color, size) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cache.glow || (cache.glow = SIM.glowTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)')), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -140,7 +239,7 @@
 
   SIM.fuselageGeom = fuselageGeom; SIM.fusYOff = yOff;
   SIM.buildAircraft = function (livName, simple, type) {
-    const L = LIV[livName] || LIV.sanaga, [tex, emi] = liveryTex(L);
+    const L = LIV[livName] || LIV.sanaga, [tex, emi] = liveryTex(L, type === 'leviathan' ? 4 : type === 'titan' ? 3 : type === 'super' || type === 'hyperion' ? 2 : 1);
     const mats = {
       fus: new THREE.MeshPhongMaterial({ map: tex, emissiveMap: emi, emissive: 0x000000, shininess: 70, specular: 0x777777 }),
       wing: new THREE.MeshPhongMaterial({ color: 0xc9ced4, shininess: 50, specular: 0x666666, side: THREE.DoubleSide }),
@@ -151,52 +250,102 @@
       white: new THREE.MeshPhongMaterial({ color: 0xf3f5f7, shininess: 80 }),
       metal: new THREE.MeshPhongMaterial({ color: 0x9aa1a8, shininess: 100, specular: 0xaaaaaa }),
       dark: new THREE.MeshLambertMaterial({ color: 0x16191d }), blade: new THREE.MeshPhongMaterial({ color: 0x3a3f45, shininess: 80 }),
-      tire: new THREE.MeshLambertMaterial({ color: 0x141414 }), strut: new THREE.MeshPhongMaterial({ color: 0xd8dbde, shininess: 90 }),
+      tire: new THREE.MeshPhongMaterial({ map: treadTex(), color: 0xffffff, shininess: 12, specular: 0x222222 }), strut: new THREE.MeshPhongMaterial({ color: 0xd8dbde, shininess: 90 }),
+      chrome: new THREE.MeshPhongMaterial({ color: 0xe8edf2, shininess: 160, specular: 0xffffff }), rim: new THREE.MeshPhongMaterial({ color: 0xb9bfc6, shininess: 110, specular: 0xbbbbbb }),
+      rimDark: new THREE.MeshPhongMaterial({ color: 0x6b7178, shininess: 60 }), brake: new THREE.MeshPhongMaterial({ color: 0x3b3430, shininess: 30 }),
     };
     const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-    const TS = { A319: [1, 1, 0.88], A321: [1, 1, 1.18], militaire: [1.05, 1.05, 1.1], gros: [1.45, 1.45, 1.45], jumbo: [1.55, 1.6, 1.9], super: [1.75, 2.1, 1.95], jet: [0.42, 0.42, 0.46] }[type];
+    const TS = { leviathan: [3.5, 3.4, 4.2], hyperion: [3.0, 2.9, 5.6], titan: [2.9, 3.0, 2.95], colosse: [3.0, 2.4, 2.5], geant: [2.25, 2.0, 2.3], A319: [1, 1, 0.88], A321: [1, 1, 1.18], militaire: [1.05, 1.05, 1.1], gros: [1.45, 1.45, 1.45], jumbo: [1.55, 1.6, 1.9], super: [1.75, 2.1, 1.95], jet: [0.42, 0.42, 0.46] }[type];
     if (TS) body.scale.set(TS[0], TS[1], TS[2]);
     body.add(new THREE.Mesh(fuselageGeom(), mats.fus));
     const fair = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), mats.wing); fair.scale.set(2.05, 0.95, 8.2); fair.position.set(0, 2.55, -0.6); body.add(fair);
-    const wg = cache.wg || (cache.wg = wingGeom(WING, 0.75)); body.add(new THREE.Mesh(wg, mats.wing)); body.add(new THREE.Mesh(mirrorG(wg), mats.wing));
+    // ailes : les très grands avions ont des ailes plus longues qui s'affaissent légèrement vers le bas sous leur propre poids
+    const BEND = { jumbo: 0.012, super: 0.018, geant: 0.03, titan: 0.035, colosse: 0.04, leviathan: 0.05, hyperion: 0.055 }, SPANK = { leviathan: 1.25, hyperion: 1.35 };
+    const WINGt = BEND[type] || SPANK[type] ? Object.assign({}, WING, { bend: BEND[type] || 0, span: WING.span * (SPANK[type] || 1) }) : WING, wk = WINGt === WING ? '' : type;
+    const droop = x => { const sp = (Math.abs(x) - WINGt.x0) / (WINGt.span * Math.cos(WINGt.dih * D2R)); return sp > 0 ? (WINGt.bend || 0) * sp * sp * WINGt.span : 0; };
+    const wg = cache['wg' + wk] || (cache['wg' + wk] = wingGeom(WINGt, 0.75)), wgm = cache['wgm' + wk] || (cache['wgm' + wk] = mirrorG(wg)), wingR = new THREE.Mesh(wg, mats.wing), wingL = new THREE.Mesh(wgm, mats.wing); body.add(wingR); body.add(wingL);
     const hg = cache.hg || (cache.hg = wingGeom(HSTAB, 0.7)), hsR = new THREE.Mesh(hg, mats.wing), hsL = new THREE.Mesh(mirrorG(hg), mats.wing); body.add(hsR); body.add(hsL);
-    const fg = cache.fg || (cache.fg = wingGeom(FIN, 0.68)); body.add(new THREE.Mesh(fg, mats.fin));
-    const tip = wingPt(WING, 1, 0, 0), SH = { span: 2.3, rc: 1.5, tc: 0.55, sweep: 38, dih: 80, th: 0.08, x0: tip.x - 0.05, y0: tip.y, z0: tip.z + 0.05 };
-    const sg = cache.sg || (cache.sg = wingGeom(SH, 1)); body.add(new THREE.Mesh(sg, mats.fin)); body.add(new THREE.Mesh(mirrorG(sg), mats.fin));
-    for (const sx of [1, -1]) { const d = new THREE.Mesh(new THREE.CircleGeometry(1.0, 28), mats.acc); d.position.set(sx * 0.33, 8.3, 16.6); d.rotation.y = sx * Math.PI / 2; body.add(d); }
+    const fg = cache.fg || (cache.fg = wingGeom(FIN, 0.68)), finM = new THREE.Mesh(fg, mats.fin); body.add(finM);
+    // empennage double (An-225) : deux dérives au bout du stabilisateur, pas de dérive centrale
+    // Titan triple pont : grand ventre et seconde quille ventrale ; Colosse : deux fuselages latéraux posés sur l'aile
+    if (type === 'titan') { const hump = new THREE.Mesh(new THREE.SphereGeometry(1, 30, 16), mats.fus); hump.scale.set(1.6, 1.0, 13.5); hump.position.set(0, CY + 1.25, -1.5); body.add(hump); }
+    if (type === 'leviathan') { const hump = new THREE.Mesh(new THREE.SphereGeometry(1, 30, 16), mats.fus); hump.scale.set(1.7, 1.25, 15.5); hump.position.set(0, CY + 1.35, -0.5); body.add(hump); }
+    if (type === 'hyperion') { const hump = new THREE.Mesh(new THREE.SphereGeometry(1, 30, 16), mats.fus); hump.scale.set(1.35, 0.9, 10); hump.position.set(0, CY + 1.3, -7); body.add(hump);
+      const cg = cache.cang || (cache.cang = wingGeom({ span: 4.2, rc: 2.6, tc: 1.0, sweep: 35, dih: 3, th: 0.1, x0: 1.4, y0: 3.4, z0: -13.5 }, 1)); body.add(new THREE.Mesh(cg, mats.wing), new THREE.Mesh(cache.cangm || (cache.cangm = mirrorG(cg)), mats.wing)); }   // plans canard à l'avant (fuselage très long)
+    const pods = [];
+    if (type === 'colosse') for (const sx of [1, -1]) {
+      const pod = new THREE.Mesh(fuselageGeom(), mats.fus); pod.scale.set(0.5, 0.72, 0.78); pod.position.set(sx * 8.6, 0.55 - droop(8.6), 1.4); body.add(pod); pods.push(pod);
+      const pf2 = new THREE.Mesh(fg, mats.fin); pf2.scale.set(1, 0.6, 0.62); pf2.position.set(sx * 8.6, 0.9 - droop(8.6), 6.2); body.add(pf2);
+    }
+    const tip = wingPt(WINGt, 1, 0, 0), SH = { span: 2.3, rc: 1.5, tc: 0.55, sweep: 38, dih: 80, th: 0.08, x0: tip.x - 0.05, y0: tip.y, z0: tip.z + 0.05 };
+    const sg = cache['sg' + wk] || (cache['sg' + wk] = wingGeom(SH, 1)), tipR = new THREE.Mesh(sg, mats.fin), tipL = new THREE.Mesh(cache['sgm' + wk] || (cache['sgm' + wk] = mirrorG(sg)), mats.fin); body.add(tipR); body.add(tipL);
+    if (type !== 'geant') for (const sx of [1, -1]) { const d = new THREE.Mesh(new THREE.CircleGeometry(1.0, 28), mats.acc); d.position.set(sx * 0.33, 8.3, 16.6); d.rotation.y = sx * Math.PI / 2; body.add(d); }
     // gouvernes
     const S = {};
-    const pf = plate(WING, 0.0, 0.6, 0.75, 1.0), pa = plate(WING, 0.6, 0.985, 0.75, 1.0), pe = plate(HSTAB, 0.02, 0.98, 0.7, 1.0), pr = plate(FIN, 0.04, 0.96, 0.68, 1.0);
+    const pf = plate(WINGt, 0.0, 0.6, 0.75, 1.0), pa = plate(WINGt, 0.6, 0.985, 0.75, 1.0), pe = plate(HSTAB, 0.02, 0.98, 0.7, 1.0), pr = plate(FIN, 0.04, 0.96, 0.68, 1.0);
     S.flapR = surface(body, pf, mats.surf); S.flapL = surface(body, pf, mats.surf, true);
     S.ailR = surface(body, pa, mats.surf); S.ailL = surface(body, pa, mats.surf, true);
     S.elevR = surface(body, pe, mats.surf); S.elevL = surface(body, pe, mats.surf, true);
     S.rud = surface(body, pr, mats.fin);
+    // An-225 « Mriya » : grand empennage horizontal à fort dièdre, deux grandes dérives ovales en bout avec gouvernes de direction, pas de dérive centrale
+    if (type === 'geant') {
+      finM.visible = false; S.rud.visible = false; hsR.visible = hsL.visible = false; S.elevR.visible = S.elevL.visible = false;
+      const HT = { span: 8.8, rc: 4.8, tc: 2.5, sweep: 24, dih: 9.5, th: 0.1, x0: 0.25, y0: 4.75, z0: 13.0 };
+      const htg = cache.ht225 || (cache.ht225 = wingGeom(HT, 0.7)); body.add(new THREE.Mesh(htg, mats.wing), new THREE.Mesh(cache.ht225m || (cache.ht225m = mirrorG(htg)), mats.wing));
+      const pe2 = plate(HT, 0.03, 0.95, 0.7, 1.0); S.elevR = surface(body, pe2, mats.surf); S.elevL = surface(body, pe2, mats.surf, true);
+      const tp = wingPt(HT, 0.97, 0.5, 0), ch = 3.9;
+      const FU = { span: 5.4, rc: ch + 0.6, tc: 2.6, sweep: 30, dih: 90, th: 0.1, x0: tp.x, y0: tp.y - 0.1, z0: tp.z - ch / 2 - 0.3 };
+      const FD = { span: 1.7, rc: ch, tc: 2.2, sweep: -18, dih: -90, th: 0.1, x0: tp.x, y0: tp.y + 0.1, z0: tp.z - ch / 2 };
+      for (const sx of [1, -1]) {
+        const fu = sx > 0 ? FU : Object.assign({}, FU, { x0: -FU.x0 }), fd = sx > 0 ? FD : Object.assign({}, FD, { x0: -FD.x0 });
+        body.add(new THREE.Mesh(wingGeom(fu, 0.7), mats.fin), new THREE.Mesh(wingGeom(fd, 0.7), mats.fin));
+        const r = surface(body, plate(fu, 0.05, 0.95, 0.7, 1.0), mats.acc); if (sx > 0) S.rud = r; else S.rud2 = r;
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), mats.fin); cap.scale.set(1, 0.6, 3.2); cap.position.set(sx * tp.x, tp.y, tp.z + 0.4); body.add(cap);   // carénage à la jonction
+      }
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.4, 14), mats.fus); cone.rotation.x = Math.PI / 2; cone.position.set(0, CY + 0.2, 19.6); body.add(cone);
+    }
     // jet privé : empennage en T
     if (type === 'jet') { const sh = new V3(0, 6.6, 3.0); [hsR, hsL].forEach(m => m.position.add(sh)); [S.elevR, S.elevL].forEach(p => p.userData.h.add(sh)); }
     // bosse du pont supérieur (type 747)
     if (type === 'jumbo') { const hump = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 16), mats.white); hump.scale.set(1.25, 1.05, 7.2); hump.position.set(0, CY + 1.45, -10.0); body.add(hump);
       const hw = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.18, 7.5), mats.dark); hw.position.set(0, CY + 2.0, -10.5); body.add(hw); }
     S.spR = []; S.spL = [];
-    for (let i = 0; i < 5; i++) { const s0 = 0.08 + i * 0.1, p = plate(WING, s0, s0 + 0.095, 0.58, 0.745, true); S.spR.push(surface(body, p, mats.surf)); S.spL.push(surface(body, p, mats.surf, true)); }
+    for (let i = 0; i < 5; i++) { const s0 = 0.08 + i * 0.1, p = plate(WINGt, s0, s0 + 0.095, 0.58, 0.745, true); S.spR.push(surface(body, p, mats.surf)); S.spL.push(surface(body, p, mats.surf, true)); }
     // slats (bord d'attaque)
     // réacteurs
     const engs = [];
     if (type === 'jet') for (const sx of [1, -1]) { const e = engine(mats, simple); e.position.set(sx * 3.05, 4.55, 12.0); e.rotation.z = sx * Math.PI / 2; e.scale.setScalar(0.9); body.add(e); engs.push(e); }
     else for (const sx of [1, -1]) { const e = engine(mats, simple); e.position.set(sx * 5.75, 1.55, -2.0); body.add(e); engs.push(e); }
-    if (type === 'jumbo' || type === 'super') for (const sx of [1, -1]) { const e = engine(mats, simple); e.position.set(sx * 10.6, 2.15, 0.6); e.scale.setScalar(0.92); body.add(e); engs.push(e); }
+    if (type === 'geant') for (const sx of [1, -1]) for (const [ex, ez] of [[9.4, 0.9], [13.0, 2.6]]) { const e = engine(mats, simple); e.position.set(sx * ex, 1.85 + ex * 0.06 - droop(ex), ez); e.scale.setScalar(0.92); body.add(e); engs.push(e); }
+    if (type === 'titan') for (const sx of [1, -1]) for (const ex of [9.0, 12.0, 14.8]) { const e = engine(mats, simple); e.position.set(sx * ex, 1.55 + (ex - 5.75) * 0.096 - droop(ex), -2.0 + (ex - 5.75) * 0.5); e.scale.setScalar(0.92); body.add(e); engs.push(e); }
+    if (type === 'colosse') for (const sx of [1, -1]) for (const ex of [11.0, 13.2, 15.4]) { const e = engine(mats, simple); e.position.set(sx * ex, 1.55 + (ex - 5.75) * 0.096 - droop(ex), -2.0 + (ex - 5.75) * 0.5); e.scale.set(0.62, 0.8, 0.8); body.add(e); engs.push(e); }
+    if (type === 'leviathan' || type === 'hyperion') for (const sx of [1, -1]) for (const ex of type === 'leviathan' ? [8.6, 11.4, 14.2, 17.0, 19.8] : [9.2, 12.6, 16.0]) { const e = engine(mats, simple); e.position.set(sx * ex, 1.55 + (ex - 5.75) * 0.096 - droop(ex), -2.0 + (ex - 5.75) * 0.5); e.scale.set(type === 'leviathan' ? 0.62 : 0.72, 0.85, 0.85); body.add(e); engs.push(e); }
+    if (type === 'jumbo' || type === 'super') for (const sx of [1, -1]) { const e = engine(mats, simple); e.position.set(sx * 10.6, 2.15 - droop(10.6), 0.6); e.scale.setScalar(0.92); body.add(e); engs.push(e); }
     // train d'atterrissage
     const gear = { main: [], nose: null, wheels: [] };
-    for (const sx of [1, -1]) {
-      const piv = new THREE.Group(); piv.position.set(sx * 3.8, 2.45, 0);
-      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 1.95, 10), mats.strut); st.position.y = -0.95; piv.add(st);
-      const ax = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.1, 8).rotateZ(Math.PI / 2), mats.metal); ax.position.y = -1.87; piv.add(ax);
-      for (const wx of [-0.47, 0.47]) { const w = wheel(0.58, 0.4, mats); w.position.set(wx, -1.87, 0); piv.add(w); gear.wheels.push({ w, r: 0.58 }); }
-      body.add(piv); gear.main.push({ piv, sx });
-    }
+    const axles = ['geant', 'titan', 'colosse', 'leviathan', 'hyperion'].includes(type) ? [-2.1, -1.05, 0, 1.05, 2.1] : type === 'super' ? [-1.05, 0, 1.05] : ['gros', 'jumbo'].includes(type) ? [-0.72, 0.72] : [0];
+    const legs = [[3.8, 0]]; if (type === 'jumbo' || type === 'super' || type === 'geant' || type === 'titan') legs.push([1.9, 2.6]); if (type === 'titan' || type === 'leviathan') legs.push([1.9, -2.6]); if (type === 'leviathan') legs.push([1.9, 5.2], [3.8, 2.6]); if (type === 'hyperion') legs.push([1.9, 2.6], [1.9, -5.5], [1.9, -8]); if (type === 'colosse') legs.push([8.6, 0.6]);
+    legs.forEach(([lx, lz]) => {
+      for (const sx of [1, -1]) {
+        const piv = new THREE.Group(); piv.position.set(sx * lx, 2.45, lz);
+        oleo(piv, 1.87, 0.14, mats, lx > 3 ? sx : 0, simple);
+        if (axles.length > 1) {
+          // bogie : poutre à plusieurs essieux
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, (axles[axles.length - 1] - axles[0]) + 0.35), mats.strut); beam.position.y = -1.87; piv.add(beam);
+        }
+        axles.forEach(az => {
+          const ax = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 8).rotateZ(Math.PI / 2), mats.metal); ax.position.set(0, -1.87, az); piv.add(ax);
+          for (const wx of [-0.47, 0.47]) { const w = wheel(0.58, 0.4, mats, simple, true); w.position.set(wx, -1.87, az); if (wx * sx < 0) w.rotation.y = Math.PI; piv.add(w); gear.wheels.push({ w, r: 0.58 }); }
+        });
+        body.add(piv); gear.main.push({ piv, sx });
+      }
+    });
     { const piv = new THREE.Group(); piv.position.set(0, 2.3, -11.0);
-      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 1.6, 10), mats.strut); st.position.y = -0.8; piv.add(st);
+      oleo(piv, 1.55, 0.1, mats, 0, simple);
       const low = new THREE.Group(); low.position.y = -1.9; piv.add(low);
-      for (const wx of [-0.27, 0.27]) { const w = wheel(0.38, 0.26, mats); w.position.x = wx; low.add(w); gear.wheels.push({ w, r: 0.38 }); }
+      const ax = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.62, 8).rotateZ(Math.PI / 2), mats.metal); low.add(ax);
+      if (!simple) { const fk = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42, 0.14), mats.strut); fk.position.set(0, 0.22, 0.05); low.add(fk); }
+      for (const wx of [-0.27, 0.27]) { const w = wheel(0.38, 0.26, mats, simple, false); w.position.x = wx; if (wx < 0) w.rotation.y = Math.PI; low.add(w); gear.wheels.push({ w, r: 0.38 }); }
       body.add(piv); gear.nose = { piv, low }; }
     // trappes de train (se ferment quand les roues sont rentrées dans le fuselage)
     gear.doors = [];
@@ -209,6 +358,37 @@
       const dp = new THREE.Group(); dp.position.set(sx * 0.52, 1.93, -12.0);
       const d = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 2.3), mats.white); d.position.x = -sx * 0.25; dp.add(d); body.add(dp);
       gear.doors.push({ p: dp, ax: 'z', open: sx * 1.4 });
+    }
+    // nez : joint du radôme, sondes pitot, sondes d'incidence, essuie-glaces, antennes
+    if (!simple) {
+      const rz = -17.85, seam = new THREE.Mesh(new THREE.TorusGeometry(rAt(rz) + 0.004, 0.012, 6, 40), mats.rimDark); seam.position.set(0, CY + yOff(rz), rz); body.add(seam);
+      for (const sx of [1, -1]) {
+        for (const [pz, ang] of [[-15.9, -18], [-15.5, -28]]) {
+          const rr = rAt(pz), a = ang * D2R, base = new THREE.Vector3(sx * rr * Math.cos(a), CY + yOff(pz) + rr * Math.sin(a), pz);
+          const pit = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.026, 0.42, 6).rotateX(Math.PI / 2), mats.chrome); pit.position.copy(base).add(new THREE.Vector3(sx * 0.07, 0, -0.18)); body.add(pit);
+          const mt = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.14), mats.metal); mt.position.copy(base).add(new THREE.Vector3(sx * 0.03, 0, 0.02)); body.add(mt);
+        }
+        const aoa = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.09, 0.14), mats.dark); const az = -14.9, rr = rAt(az); aoa.position.set(sx * (rr + 0.02), CY + yOff(az) + 0.25, az); body.add(aoa);
+        const wz = -16.95, wr = rAt(wz), wip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.55), mats.dark);
+        wip.position.set(sx * 0.42, CY + yOff(wz) + wr * 0.88, wz + 0.1); wip.rotation.set(-0.95, sx * 0.25, 0); body.add(wip);
+      }
+      const ant = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.32, 0.3), mats.white); ant.position.set(0, CY + 2.12, -6); ant.rotation.x = 0.25; body.add(ant);
+      const ant2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.24, 0.22), mats.white); ant2.position.set(0, CY - 2.1, -9); body.add(ant2);
+      // antennes VHF / GPS supplémentaires, dôme satellite sur les long-courriers
+      [[CY + 2.0, 3.5, 0.2], [CY + 2.02, -11.5, 0.12], [CY - 2.05, 4.5, 0.16]].forEach(([y, z, h]) => { const a2 = new THREE.Mesh(new THREE.BoxGeometry(0.035, h, 0.18), mats.white); a2.position.set(0, y + (y > CY ? h / 2 : -h / 2), z); a2.rotation.x = y > CY ? 0.3 : -0.3; body.add(a2); });
+      if (['gros', 'jumbo', 'super', 'titan', 'leviathan', 'hyperion', 'colosse'].includes(type)) { const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mats.white); dome.scale.set(0.5, 0.2, 1.4); dome.position.set(0, CY + 1.96, 1.5); body.add(dome); }
+      // carénages des rails de volets (« canoës ») sous l'aile
+      const canoe = new THREE.SphereGeometry(1, 14, 8);
+      for (const sp of [0.18, 0.4, 0.62]) for (const sx of [1, -1]) {
+        const pB = wingPt(WINGt, sp, 0.78, -1), c = new THREE.Mesh(canoe, mats.wing); c.scale.set(0.16, 0.2, 1.35); c.position.set(sx * pB.x, pB.y - 0.12, pB.z + 0.55); body.add(c);
+      }
+      // déchargeurs d'électricité statique au bord de fuite (ailes, stabilisateurs, dérive)
+      const wick = new THREE.CylinderGeometry(0.008, 0.008, 0.32, 4).rotateX(Math.PI / 2), wm = mats.dark;
+      for (const sp of [0.8, 0.88, 0.95, 1.0]) for (const sx of [1, -1]) { const pT = wingPt(WINGt, sp, 1, 0), w = new THREE.Mesh(wick, wm); w.position.set(sx * pT.x, pT.y, pT.z + 0.15); body.add(w); }
+      if (type !== 'geant' && type !== 'jet') { for (const sp of [0.85, 1.0]) for (const sx of [1, -1]) { const pT = wingPt(HSTAB, sp, 1, 0), w = new THREE.Mesh(wick, wm); w.position.set(sx * pT.x, pT.y, pT.z + 0.15); body.add(w); }
+        for (const sp of [0.7, 0.85, 1.0]) { const pT = wingPt(FIN, sp, 1, 0), w = new THREE.Mesh(wick, wm); w.position.set(pT.x, pT.y, pT.z + 0.15); body.add(w); } }
+      // sortie d'échappement de l'APU (petit réacteur auxiliaire) au bout de la queue
+      const apu = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.35, 14, 1, true).rotateX(Math.PI / 2), mats.rimDark); apu.position.set(0, CY + yOff(18.9) + 0.03, 18.95); body.add(apu);
     }
     // feux
     const lt = {};
@@ -224,7 +404,42 @@
     lt.taxi = glowSprite(0xfff6e0, 2); lt.taxi.position.set(0, 0.9, -11.3); gear.nose.piv.add(lt.taxi); lt.taxi.position.set(0, -1.0, -0.3);
     lt.wingL = glowSprite(0xdfe8ff, 1.2); lt.wingL.position.set(-1.9, 4.2, -5.5); body.add(lt.wingL);
     lt.wingR = glowSprite(0xdfe8ff, 1.2); lt.wingR.position.set(1.9, 4.2, -5.5); body.add(lt.wingR);
-    const out = { root, body, mats, S, engs, gear, lt, simple };
+    // porte avant gauche (L1) : elle sort un peu du fuselage puis pivote vers l'avant, comme sur un Airbus
+    const dz = -14.7, dr = rAt(dz), dH = 1.86, dW = 0.84, dy = CY + yOff(dz) + 0.08;
+    const hole = new THREE.Mesh(new THREE.PlaneGeometry(dW, dH), new THREE.MeshBasicMaterial({ color: 0x1a1c20 })); hole.rotation.y = -Math.PI / 2; hole.position.set(-dr + 0.012, dy, dz); body.add(hole);
+    const dpiv = new THREE.Group(); dpiv.position.set(-dr - 0.03, dy, dz - dW / 2); body.add(dpiv);
+    const dslide = new THREE.Group(); dpiv.add(dslide);
+    const dpan = new THREE.Mesh(new THREE.BoxGeometry(0.07, dH, dW), mats.white); dpan.position.set(0, 0, dW / 2); dslide.add(dpan);
+    const dwin = new THREE.Mesh(new THREE.CircleGeometry(0.11, 14), mats.dark); dwin.rotation.y = -Math.PI / 2; dwin.position.set(-0.037, 0.38, dW / 2); dslide.add(dwin);
+    const dhan = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.3), mats.metal); dhan.position.set(-0.045, 0.02, dW / 2 + 0.12); dslide.add(dhan);
+    const dfr = new THREE.Mesh(new THREE.BoxGeometry(0.02, dH + 0.08, dW + 0.08), mats.dark); dfr.position.set(0.035, 0, dW / 2); dslide.add(dfr);
+    const setDoor = k => { const a = clamp(k / 0.3, 0, 1), b = clamp((k - 0.3) / 0.7, 0, 1); dpiv.position.x = -dr - 0.03 - 0.26 * a; dpiv.rotation.y = -b * 2.85; };
+    setDoor(0);
+    const out = { root, body, mats, S, engs, gear, lt, simple, setDoor };
+    // dégâts visibles après un choc : le bout d'aile ou le haut de la dérive est arraché (il tombe)
+    out.dmg = { wingL: 0, wingR: 0, fin: 0 };
+    out.damage = function (part, k) {
+      k = clamp(k, 0, 1); out.dmg[part] = Math.max(out.dmg[part] || 0, k); const d = out.dmg[part];
+      if (part === 'wingL' || part === 'wingR') {
+        const L = part === 'wingL', w = L ? wingL : wingR, tip = L ? tipL : tipR, nav = L ? lt.navL : lt.navR, str = L ? lt.strL : lt.strR, ail = L ? S.ailL : S.ailR;
+        // l'aile se tord et se froisse : la partie extérieure plie vers le bas et vers l'arrière, la tôle est cabossée, le bout arraché est coupé en dents de scie
+        const base = L ? wgm : wg, g2 = base.clone(), pa = g2.attributes.position, xr = WINGt.x0, spn = WINGt.span, cut = 1 - 0.42 * d, s0 = Math.max(0.25, cut - 0.35), seed = (out.dmgSeed = out.dmgSeed || Math.random() * 10);
+        for (let i = 0; i < pa.count; i++) {
+          const x = pa.getX(i), ax = Math.abs(x), sg = Math.sign(x) || 1; let sp = (ax - xr) / spn, y = pa.getY(i), z = pa.getZ(i);
+          if (sp > cut) { const jag = 0.025 * Math.sin(z * 9 + seed) * d; sp = cut + jag; }
+          if (sp > s0) { const t = (sp - s0) / Math.max(0.05, 1 - s0);
+            y -= t * t * d * 1.6 + Math.sin(sp * 37 + seed) * Math.sin(z * 5.3 + seed * 2) * 0.09 * d * t;      // pliure vers le bas + bosses
+            z += t * t * d * 0.7;                                                                               // l'aile recule en se tordant
+            y += (z - (WINGt.z0 + Math.tan(WINGt.sweep * D2R) * sp * spn)) * -0.05 * d * t;                    // vrillage
+          }
+          pa.setXYZ(i, sg * (xr + sp * spn), y, z);
+        }
+        g2.computeVertexNormals(); if (w.geometry !== wg && w.geometry !== wgm) w.geometry.dispose(); w.geometry = g2;
+        tip.visible = d < 0.12; if (nav) nav.visible = d < 0.12; if (str) str.visible = d < 0.12; if (ail) ail.visible = d < 0.3; const fl = L ? S.flapL : S.flapR; if (fl) fl.visible = d < 0.6;
+        out.navOff = out.navOff || {}; out.navOff[part] = d >= 0.12;
+      } else if (part === 'fin') { finM.scale.y = 1 - 0.5 * d; if (S.rud) S.rud.visible = d < 0.3; if (S.rud2) S.rud2.visible = d < 0.3; }
+    };
+    out.repair = function () { out.dmg = { wingL: 0, wingR: 0, fin: 0 }; out.dmgSeed = 0; out.navOff = {}; if (wingL.geometry !== wgm) { wingL.geometry.dispose(); wingL.geometry = wgm; } if (wingR.geometry !== wg) { wingR.geometry.dispose(); wingR.geometry = wg; } tipL.visible = tipR.visible = true; [lt.navL, lt.navR, lt.strL, lt.strR, S.ailL, S.ailR, S.flapL, S.flapR, S.rud].forEach(o => { if (o) o.visible = true; }); finM.scale.y = 1; if (type === 'geant') finM.visible = false; out.navOff = {}; };
     if (!simple) {
       const spot = new THREE.SpotLight(0xfff4e0, 0, 2200, 0.32, 0.55, 1.2); spot.position.set(0, 2.4, -12);
       const tgt = new THREE.Object3D(); tgt.position.set(0, -40, -400); body.add(tgt); spot.target = tgt; body.add(spot); out.spot = spot;
@@ -237,7 +452,7 @@
       setSurf(S.flapR, fl * 32 * D2R, fl * 1.1, fl * 0.15); setSurf(S.flapL, fl * 32 * D2R, fl * 1.1, fl * 0.15);
       const ai = s.ail * 20 * D2R; setSurf(S.ailR, -ai + fl * 5 * D2R); setSurf(S.ailL, ai + fl * 5 * D2R);
       const ev = -s.elev * 25 * D2R; setSurf(S.elevR, ev); setSurf(S.elevL, ev);
-      setSurf(S.rud, s.rud * 25 * D2R);
+      setSurf(S.rud, s.rud * 25 * D2R); if (S.rud2) setSurf(S.rud2, s.rud * 25 * D2R);
       S.spR.forEach(p => setSurf(p, -(s.spoil * 45 + Math.max(0, s.ail) * 25) * D2R));
       S.spL.forEach(p => setSurf(p, -(s.spoil * 45 + Math.max(0, -s.ail) * 25) * D2R));
       const gk = 1 - s.gearPos;
@@ -247,10 +462,12 @@
       const dOpen = s.gearPos > 0.015 && s.gearPos < 0.985 ? 1 : 0; out.doorK = (out.doorK || 0) + clamp(dOpen - (out.doorK || 0), -s.dt * 1.5, s.dt * 1.5);
       gear.doors.forEach(d => d.p.rotation.z = d.open * out.doorK);
       gear.wheels.forEach(w => { w.w.rotation.x -= (s.wheelV || 0) * s.dt / w.r; });
-      engs.forEach((e, i) => { e.userData.fan.rotation.z += (s.n1[i % 2] || 0) * 60 * s.dt; });
+      engs.forEach((e, i) => { e.userData.fan.rotation.z += (s.n1[i % 2] || 0) * 60 * s.dt;
+        const u = e.userData; if (u.sleeve) { u.revK += clamp((s.rev ? 1 : 0) - u.revK, -s.dt * 0.6, s.dt * 0.6); u.sleeve.position.z = 1.18 + 0.62 * u.revK; u.casc.visible = u.sleeve.visible = u.revK > 0.02; } });
       const t = s.t, N = s.night, L = s.lights;
-      lt.navL.visible = lt.navR.visible = lt.tail.visible = !!L.nav;
-      const sf = (t % 1.2); lt.strL.visible = lt.strR.visible = !!L.strobe && (sf < 0.05 || (sf > 0.12 && sf < 0.17));
+      const no = out.navOff || {};
+      lt.navL.visible = !!L.nav && !no.wingL; lt.navR.visible = !!L.nav && !no.wingR; lt.tail.visible = !!L.nav;
+      const sf = (t % 1.2), sOn = !!L.strobe && (sf < 0.05 || (sf > 0.12 && sf < 0.17)); lt.strL.visible = sOn && !no.wingL; lt.strR.visible = sOn && !no.wingR;
       const bf = (t % 1.0) < 0.1; lt.beaT.visible = lt.beaB.visible = !!L.beacon && bf;
       lt.landL.visible = lt.landR.visible = !!L.landing; lt.taxi.visible = !!L.taxi && s.gearPos > 0.9;
       lt.wingL.visible = lt.wingR.visible = !!L.wing;

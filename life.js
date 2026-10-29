@@ -65,8 +65,43 @@
       ell(helm, x, y + 0.53, z + 0.02, 0.17, 0.17, 0.18, 14);                    // casque
       ell(visor, x, y + 0.5, z - 0.11, 0.14, 0.07, 0.07, 12);                    // visière
     }
-    let rotorR, mastY, eye, trPos, trSide;
-    if (!attack) {
+    let rotorR, mastY, eye, trPos, trSide, nBl = 4, trN = 4, trLen = 1.65, trCant = 0, trScissor = false, fen = false;
+    // dérive profilée : contour latéral (z, y) extrudé en épaisseur, bords arrondis ; trous possibles (carénage Fenestron)
+    const finShape = (pts, thick, mat, hole) => { const sh = new THREE.Shape(); pts.forEach(([z, y], i) => sh[i ? 'lineTo' : 'moveTo'](z, y)); sh.closePath();
+      if (hole) { const h = new THREE.Path(); h.absarc(hole[0], hole[1], hole[2], 0, Math.PI * 2, true); sh.holes.push(h); }
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: true, bevelThickness: thick * 0.35, bevelSize: thick * 0.35, bevelSegments: 2, curveSegments: 24 });
+      geo.translate(0, 0, -thick / 2); geo.rotateY(-Math.PI / 2); const m = new THREE.Mesh(geo, mat); g.add(m); return m; };
+    if (civil) {
+      // --- hélicoptère civil bimoteur léger (type H145 / EC145) : cellule arrondie, grande verrière, patins, portes arrière en coquille, Fenestron ---
+      add(rbox(1.86, 1.62, 3.5, 0.55), body, 0, 1.72, -0.55);                    // cabine
+      add(rbox(1.8, 0.42, 3.4, 0.2), belly, 0, 0.98, -0.55);                     // ventre
+      ell(body, 0, 1.62, -2.45, 0.93, 0.84, 1.3);                                // nez
+      ell(glass, 0, 2.02, -2.55, 0.9, 0.66, 1.2);                                // grande verrière bombée
+      ell(glass, 0, 1.18, -3.0, 0.62, 0.32, 0.62, 18);                           // vitres de plancher (vue vers le bas)
+      ell(body, 0, 1.78, 1.25, 0.92, 0.82, 1.15);                                // arrière en coquille (portes de chargement)
+      add(new THREE.BoxGeometry(0.03, 1.2, 0.03), dark, 0, 1.8, 2.36);           // joint des portes coquille
+      add(new THREE.BoxGeometry(0.05, 0.75, 0.05), dark, 0, 2.3, -3.55).rotation.x = -0.75;   // montant central du pare-brise
+      pilot(-0.42, 1.72, -2.15); pilot(0.42, 1.72, -2.15);
+      for (const s of [-1, 1]) {
+        add(new THREE.PlaneGeometry(0.95, 0.68), glass, s * 0.945, 2.0, -1.25, 0, s * Math.PI / 2, 0);    // porte coulissante vitrée
+        add(new THREE.PlaneGeometry(0.75, 0.6), glass, s * 0.945, 2.0, 0.05, 0, s * Math.PI / 2, 0);
+        add(new THREE.BoxGeometry(0.03, 0.04, 2.0), dark, s * 0.95, 2.42, -0.6); add(new THREE.BoxGeometry(0.03, 1.4, 0.04), dark, s * 0.95, 1.75, -1.8);   // rails et cadre de porte
+        const sk = cylZ(0.06, 0.06, 3.9, metal, s * 1.08, 0.1, -0.55); ell(metal, s * 1.08, 0.18, -2.5, 0.06, 0.12, 0.2, 8);        // patins relevés à l'avant
+        for (const z of [-1.6, 0.5]) add(new THREE.CylinderGeometry(0.055, 0.055, 1.05, 8), metal, s * 1.0, 0.55, z, 0, 0, s * 0.32);
+        const ex = cylZ(0.17, 0.22, 0.7, dark, s * 0.55, 2.78, 1.15); ex.rotation.y = s * 0.5;                                   // tuyères des 2 turbines
+        add(new THREE.CircleGeometry(0.22, 14), dark, s * 0.45, 2.75, -1.35, 0, Math.PI, 0);                                       // entrées d'air
+      }
+      add(rbox(1.25, 0.55, 2.9, 0.24), body, 0, 2.72, -0.15);                    // capot moteurs
+      const tb = cylZ(0.2, 0.42, 4.9, body, 0, 2.05, 3.95); tb.rotation.x = Math.PI / 2 - 0.06;    // poutre de queue fine
+      add(new THREE.BoxGeometry(2.3, 0.07, 0.62), body, 0, 2.2, 5.45);           // stabilisateur
+      for (const s of [-1, 1]) finShape([[5.2, 1.95], [5.9, 1.95], [5.85, 2.75], [5.35, 2.6]], 0.06, acc).position.x = s * 1.15;     // dérivettes en bout
+      finShape([[5.95, 1.6], [7.15, 1.75], [7.55, 3.55], [7.05, 3.6], [6.35, 2.75], [5.95, 2.55]], 0.36, body, [6.75, 2.3, 0.44]);   // dérive à Fenestron
+      const ring = add(new THREE.TorusGeometry(0.44, 0.05, 8, 28), dark, 0, 2.3, 6.75, 0, Math.PI / 2, 0);
+      add(new THREE.CylinderGeometry(0.1, 0.1, 0.3, 12).rotateZ(Math.PI / 2), dark, 0, 2.3, 6.75);
+      if (kind === 'samu') { add(new THREE.BoxGeometry(0.28, 0.3, 0.5), metal, 1.0, 2.62, -1.0); add(new THREE.BoxGeometry(0.7, 0.06, 0.06), metal, 1.25, 2.68, -1.0); }   // treuil de sauvetage
+      if (kind === 'police') { ell(dark, 0, 0.85, -2.5, 0.2, 0.2, 0.2, 14); ell(glass, 0, 0.82, -2.68, 0.12, 0.12, 0.05, 10); add(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 14), metal, -0.6, 0.78, -1.9).rotation.x = Math.PI / 2; }   // caméra thermique + projecteur
+      rotorR = 5.5; mastY = 3.05; nBl = 5; eye = [-0.42, 2.2, -2.3]; trPos = [0, 2.3, 6.75]; trSide = 0; trN = 10; trLen = 0.36; fen = true;
+    } else if (!attack) {
       // --- cellule utilitaire ---
       add(rbox(2.4, 1.95, 5.0, 0.5), body, 0, 1.78, -0.55);                     // cabine
       add(rbox(2.3, 0.5, 4.6, 0.22), belly, 0, 0.92, -0.5);                     // plancher / ventre
@@ -112,12 +147,13 @@
       if (civil) for (const s of [-1, 1]) { const sk = cylZ(0.07, 0.07, 4.2, metal, s * 1.15, 0.12, -0.6); for (const z of [-1.8, 0.6]) add(new THREE.CylinderGeometry(0.06, 0.06, 0.95, 8), metal, s * 1.1, 0.55, z, 0, 0, s * 0.15); }
       // poutre de queue effilée
       const tb = cylZ(0.34, 0.78, 7.0, body, 0, 2.05, 5.2); tb.rotation.x = Math.PI / 2 - 0.05;
-      add(new THREE.BoxGeometry(0.16, 2.5, 1.25), body, 0, 3.15, 8.75, -0.42, 0, 0);       // dérive en flèche
-      add(new THREE.BoxGeometry(3.7, 0.09, 0.95), body, 0, 2.3, 8.35);                   // stabilisateur
+      finShape([[7.6, 2.05], [8.9, 2.1], [9.75, 4.35], [9.0, 4.4], [8.15, 2.6]], 0.2, body);                // dérive en flèche profilée
+      add(new THREE.BoxGeometry(4.2, 0.08, 1.05), body, 0, 2.2, 8.9);                                       // stabilateur bas
+      for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.06, 0.35, 0.95), body, s * 2.1, 2.3, 8.9);
       add(new THREE.CylinderGeometry(0.07, 0.07, 1.75, 8), metal, 0, 1.12, 7.75, 0.3, 0, 0);                    // jambe de roulette de queue
       add(new THREE.BoxGeometry(0.12, 0.3, 0.3), metal, 0, 0.3, 7.5);
       add(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 14), rubber, 0, 0.22, 7.5, 0, 0, Math.PI / 2);
-      rotorR = 8.1; mastY = 3.55; eye = [-0.5, 2.3, -3.6]; trPos = [0.25, 4.2, 9.25]; trSide = 1;
+      rotorR = 8.1; mastY = 3.55; eye = [-0.5, 2.3, -3.6]; trPos = [0.28, 4.05, 9.3]; trSide = 1; trCant = 0.35;
     } else {
       // --- hélicoptère d'attaque en tandem ---
       add(rbox(1.25, 1.55, 5.6, 0.45), body, 0, 1.95, -0.4);
@@ -144,37 +180,40 @@
         add(new THREE.CylinderGeometry(0.36, 0.36, 0.24, 16), rubber, s * 1.1, 0.36, -1.4, 0, 0, Math.PI / 2);
       }
       const tb = cylZ(0.28, 0.6, 6.4, body, 0, 2.15, 5.3); tb.rotation.x = Math.PI / 2 - 0.04;
-      add(new THREE.BoxGeometry(0.14, 2.1, 1.05), body, 0, 3.05, 8.4, -0.4, 0, 0);
-      add(new THREE.BoxGeometry(2.7, 0.08, 0.75), body, 0, 2.25, 8.05);
+      finShape([[7.4, 2.1], [8.5, 2.15], [9.25, 4.1], [8.6, 4.15], [7.9, 2.6]], 0.18, body);
+      add(new THREE.BoxGeometry(2.9, 0.08, 0.8), body, 0, 2.3, 8.55);
       add(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), rubber, 0, 0.2, 7.9, 0, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 8), metal, 0, 1.1, 8.0, 0.25, 0, 0);
-      rotorR = 7.3; mastY = 3.35; eye = [0, 3.05, -1.4]; trPos = [-0.22, 3.85, 8.85]; trSide = -1;
+      rotorR = 7.3; mastY = 3.35; eye = [0, 3.05, -1.4]; trPos = [-0.22, 3.8, 9.0]; trSide = -1; trScissor = true;
     }
     // inscription (sauf attaque)
     if (pal.txt) {
       const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.fillStyle = civil ? (kind === 'samu' ? '#d42a2a' : '#f2f2f2') : '#1d2012'; x.font = 'bold 44px Arial'; x.textAlign = 'center'; x.fillText(pal.txt, 128, 48);
       const t = new THREE.CanvasTexture(c);
-      for (const s of [-1, 1]) add(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: t, transparent: true }), s * (attack ? 0.32 : 0.6), 2.2, 4.0, 0, s * Math.PI / 2, 0).scale.x = s;
+      for (const s of [-1, 1]) add(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: t, transparent: true }), s * (attack ? 0.32 : civil ? 0.96 : 0.6), civil ? 1.38 : 2.2, civil ? -0.4 : 4.0, 0, s * Math.PI / 2, 0).scale.x = -s;
     }
-    if (civil) add(new THREE.BoxGeometry(2.42, 0.2, 5.02), acc, 0, 1.45, -0.55);              // bande de couleur
+    if (civil) { add(rbox(1.9, 0.16, 3.55, 0.07), acc, 0, 1.12, -0.55); add(new THREE.BoxGeometry(0.4, 0.14, 4.6), acc, 0, 2.05, 3.9).visible = false; }   // bande de couleur basse
     // rotor principal : mât, moyeu, 4 pales en vrillage avec léger fléchissement
     add(new THREE.CylinderGeometry(0.17, 0.2, 0.8, 14), dark, 0, mastY, -0.2);
     const rot = new THREE.Group(); rot.position.set(0, mastY + 0.42, -0.2); g.add(rot);
     if (attack) { add(new THREE.CylinderGeometry(0.1, 0.1, 0.55, 10), dark, 0, mastY + 0.85, -0.2); ell(M(0x3a3f33, 0.7), 0, mastY + 1.25, -0.2, 0.62, 0.36, 0.62, 20); }   // radar de mât
     rot.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.42, 0.28, 18), metal));
-    const bladeG = new THREE.BoxGeometry(0.55, 0.06, rotorR - 0.5); bladeG.translate(0, 0, (rotorR - 0.5) / 2 + 0.5);
+    const bladeG = new THREE.BoxGeometry(civil ? 0.36 : 0.55, 0.06, rotorR - 0.5); bladeG.translate(0, 0, (rotorR - 0.5) / 2 + 0.5);
     { const pa = bladeG.attributes.position; for (let i = 0; i < pa.count; i++) { const z = pa.getZ(i), f = 1 - 0.25 * (z / rotorR); pa.setX(i, pa.getX(i) * f + (z > rotorR - 1.2 ? (z - rotorR + 1.2) * 0.18 : 0)); } pa.needsUpdate = true; bladeG.computeVertexNormals(); }   // pales effilées à bout en flèche
-    const tipG = new THREE.BoxGeometry(0.56, 0.065, 0.45); tipG.translate(0, 0, rotorR - 0.2);
-    for (let i = 0; i < 4; i++) { const p = new THREE.Group(); p.rotation.y = i * Math.PI / 2; const b = new THREE.Mesh(bladeG, M(0x23262a, 0.6)); b.rotation.x = 0.035; b.rotation.z = 0.08; p.add(b); const tp = new THREE.Mesh(tipG, M(0xd9c33a, 0.5)); tp.rotation.x = 0.035; p.add(tp); rot.add(p); }
+    const tipG = new THREE.BoxGeometry(civil ? 0.37 : 0.56, 0.065, 0.45); tipG.translate(0, 0, rotorR - 0.2);
+    const blades = [];
+    for (let i = 0; i < nBl; i++) { const p = new THREE.Group(); p.rotation.y = i * Math.PI * 2 / nBl; const fl = new THREE.Group(); fl.rotation.x = 0.06; p.add(fl); const b = new THREE.Mesh(bladeG, M(0x23262a, 0.6)); b.rotation.z = 0.08; fl.add(b); const tp = new THREE.Mesh(tipG, M(0xd9c33a, 0.5)); fl.add(tp); rot.add(p); blades.push(fl); }   // pales articulées : affaissées à l'arrêt, conicité en vol
     const disc = new THREE.Mesh(new THREE.CircleGeometry(rotorR, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false })); rot.add(disc);
     // rotor de queue à 4 pales
-    const tr = new THREE.Group(); tr.position.set(trPos[0], trPos[1], trPos[2]); g.add(tr);
-    tr.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.2, 12).rotateZ(Math.PI / 2), metal));
-    for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.65, 0.22), M(0x23262a, 0.6)); b.position.y = 0.82; const p = new THREE.Group(); p.rotation.x = i * Math.PI / 2; p.add(b); tr.add(p); }
+    const trW = new THREE.Group(); trW.position.set(trPos[0], trPos[1], trPos[2]); trW.rotation.z = trCant * trSide; g.add(trW);   // rotor de queue incliné (Black Hawk)
+    const tr = new THREE.Group(); trW.add(tr);
+    tr.add(new THREE.Mesh(new THREE.CylinderGeometry(fen ? 0.09 : 0.16, fen ? 0.09 : 0.16, 0.2, 12).rotateZ(Math.PI / 2), metal));
+    for (let i = 0; i < trN; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.05, trLen, fen ? 0.1 : 0.22), M(0x23262a, 0.6)); b.position.y = trLen / 2 + (fen ? 0.07 : 0); b.rotation.y = fen ? 0.35 : 0;
+      const p = new THREE.Group(); p.rotation.x = trScissor ? [0, 0.96, Math.PI, Math.PI + 0.96][i] : i * Math.PI * 2 / trN; p.add(b); tr.add(p); }   // Apache : pales en ciseaux (55°)
     // feux
     const glow = c => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: SIM.glowTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), color: c, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); sp.scale.setScalar(1.3); return sp; };
-    const bea = glow(0xff2020); bea.position.set(0, attack ? 2.8 : 3.3, 1.9); bea.scale.setScalar(0.8); g.add(bea);
-    const nl = glow(0xff2020), nr = glow(0x20ff40); nl.position.set(-1.25, 2.4, -0.9); nr.position.set(1.25, 2.4, -0.9); nl.scale.setScalar(0.45); nr.scale.setScalar(0.45); g.add(nl, nr);
-    g.userData = { rot, tr, bea, disc, eye, rotorR }; return g;
+    const bea = glow(0xff2020); bea.position.set(0, attack ? 2.8 : civil ? 2.62 : 3.3, civil ? 3.4 : 1.9); bea.scale.setScalar(0.8); g.add(bea);
+    const nl = glow(0xff2020), nr = glow(0x20ff40); const nx = civil ? 1.17 : 1.25, nz = civil ? 5.45 : -0.9, ny = civil ? 2.2 : 2.4; nl.position.set(-nx, ny, nz); nr.position.set(nx, ny, nz); nl.scale.setScalar(0.45); nr.scale.setScalar(0.45); g.add(nl, nr);
+    g.userData = { rot, tr, bea, disc, eye, rotorR, blades }; return g;
   }
   function helipad(C, lx, lz, elev) {
     const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
@@ -212,6 +251,63 @@
     }
     g.userData = { legs, arms, ph: Math.random() * 6 }; return g;
   }
+
+  // passager détaillé : vraies proportions, genoux et coudes articulés, visage, coiffure, robe ou pantalon, valise à roulettes ou sac à dos
+  const HAIR = [0x111111, 0x1e140c, 0x3b2616, 0x6b4a2b, 0x8a8a8a];
+  function traveler() {
+    const g = new THREE.Group(), woman = Math.random() < 0.45, top = CLOTH[Math.random() * CLOTH.length | 0], pants = [0x1f2a3a, 0x3a3a3a, 0x5a4632, 0x2b4a6b, 0xd8d2c0][Math.random() * 5 | 0];
+    const skin = SKIN[Math.random() * SKIN.length | 0], hair = HAIR[Math.random() * HAIR.length | 0], shoe = [0x151515, 0x3a2414, 0xeeeeee][Math.random() * 3 | 0], dress = woman && Math.random() < 0.6;
+    const short = Math.random() < 0.5, jacket = !woman && Math.random() < 0.35 ? [0x1d2433, 0x3b3b3b, 0x5b4630][Math.random() * 3 | 0] : null, upper = jacket || top;
+    const H = 0.92 + Math.random() * 0.12;
+    const body = [
+      [GEO.sph(0.16), dress ? top : pants, 0, 0.95, 0, 1.05, 0.62, 0.72],                     // bassin
+      [new THREE.CylinderGeometry(0.175, 0.15, 0.5, 12), upper, 0, 1.2, 0],                    // buste
+      [GEO.sph(0.19), upper, 0, 1.44, 0, 1.05, 0.42, 0.62],                                    // épaules
+      [GEO.cyl(0.05, 0.055, 0.1), skin, 0, 1.54, 0],                                           // cou
+      [GEO.sph(0.105), skin, 0, 1.665, 0.005, 0.9, 1.1, 1],                                    // tête
+      [GEO.sph(0.11), hair, 0, 1.715, -0.012, 0.96, 0.72, 1.02],                               // cheveux
+      [GEO.sph(0.022), skin, 0, 1.655, 0.1, 1, 1, 1],                                          // nez
+      [GEO.sph(0.013), 0x101010, -0.036, 1.685, 0.092], [GEO.sph(0.013), 0x101010, 0.036, 1.685, 0.092],   // yeux
+      [GEO.sph(0.02), skin, -0.1, 1.665, 0, 0.5, 1, 1], [GEO.sph(0.02), skin, 0.1, 1.665, 0, 0.5, 1, 1],   // oreilles
+    ];
+    if (woman) body.push([GEO.sph(0.1), hair, 0, 1.6, -0.06, 1.05, 1.3, 0.7]);                 // cheveux longs
+    if (dress) body.push([new THREE.CylinderGeometry(0.16, 0.29, 0.5, 14), top, 0, 0.78, 0]);  // robe
+    if (jacket) body.push([new THREE.BoxGeometry(0.06, 0.4, 0.02), top, 0, 1.25, 0.17]);       // chemise sous la veste
+    g.add(merged(body));
+    const legs = [], knees = [], arms = [], elbows = [];
+    for (const s of [-1, 1]) {
+      const hip = new THREE.Group(); hip.position.set(s * 0.095, 0.93, 0); g.add(hip);
+      hip.add(merged([[GEO.cyl(0.085, 0.068, 0.45), dress ? skin : pants, 0, -0.225, 0]]));
+      const kn = new THREE.Group(); kn.position.y = -0.45; hip.add(kn);
+      kn.add(merged([[GEO.cyl(0.066, 0.05, 0.42), dress || (short && !woman && Math.random() < 0) ? skin : pants, 0, -0.21, 0], [GEO.sph(0.07), shoe, 0, -0.44, 0.05, 1, 0.55, 1.9]]));
+      legs.push(hip); knees.push(kn);
+      const sh = new THREE.Group(); sh.position.set(s * 0.215, 1.43, 0); g.add(sh);
+      sh.add(merged([[GEO.cyl(0.052, 0.045, 0.3), upper, 0, -0.15, 0]]));
+      const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
+      el.add(merged([[GEO.cyl(0.044, 0.036, 0.27), short && !jacket ? skin : upper, 0, -0.135, 0], [GEO.sph(0.045), skin, 0, -0.3, 0.01, 0.8, 1.25, 0.6]]));
+      arms.push(sh); elbows.push(el);
+    }
+    // valise à roulettes tirée par la main droite, ou sac à dos
+    const r = Math.random();
+    if (r < 0.55) {
+      const col = [0x1c1c1c, 0x2b4a8b, 0x8b2b2b, 0x6b5a3a, 0x4a6b3a, 0xc0c0c8][Math.random() * 6 | 0], bag = new THREE.Group();
+      bag.add(merged([[new THREE.BoxGeometry(0.36, 0.52, 0.22), col, 0, 0.3, 0], [GEO.cyl(0.012, 0.012, 0.42), 0x999999, 0.07, 0.75, 0], [GEO.cyl(0.012, 0.012, 0.42), 0x999999, -0.07, 0.75, 0], [new THREE.BoxGeometry(0.17, 0.03, 0.03), 0x222222, 0, 0.96, 0], [GEO.sph(0.03), 0x111111, 0.13, 0.03, -0.08], [GEO.sph(0.03), 0x111111, -0.13, 0.03, -0.08]]));
+      bag.position.set(0.3, 0, -0.42); bag.rotation.x = -0.42; g.add(bag); g.userData.trolley = true;
+    } else if (r < 0.8) g.add(merged([[new THREE.BoxGeometry(0.3, 0.4, 0.16), [0x20303f, 0x5a2a2a, 0x2a4a2a, 0x333333][Math.random() * 4 | 0], 0, 1.2, -0.25]]));
+    g.scale.setScalar(H);
+    g.userData = { legs, arms, knees, elbows, ph: Math.random() * 6, detailed: true }; return g;
+  }
+  // marche naturelle : hanches, genoux, bras opposés, léger rebond
+  function walkAnim(m, t, speed) {
+    const u = m.userData, ph = t * (speed || 6) + u.ph, s = Math.sin(ph);
+    if (!u.detailed) { const sw = s * 0.5; u.legs[0].rotation.x = sw; u.legs[1].rotation.x = -sw; u.arms[0].rotation.x = -sw * 0.7; u.arms[1].rotation.x = sw * 0.7; return 0; }
+    u.legs[0].rotation.x = -s * 0.42; u.legs[1].rotation.x = s * 0.42;
+    u.knees[0].rotation.x = 0.08 + 0.65 * Math.max(0, Math.sin(ph + 1.3)); u.knees[1].rotation.x = 0.08 + 0.65 * Math.max(0, Math.sin(ph + 1.3 + Math.PI));
+    u.arms[0].rotation.x = s * 0.38; u.arms[1].rotation.x = u.trolley ? 0.55 : -s * 0.38; u.arms[1].rotation.z = u.trolley ? 0.18 : 0;
+    u.elbows[0].rotation.x = -0.25 - Math.max(0, s) * 0.3; u.elbows[1].rotation.x = u.trolley ? -0.05 : -0.25 - Math.max(0, -s) * 0.3;
+    return Math.abs(Math.cos(ph)) * 0.03;
+  }
+  L.traveler = traveler; L.walkAnim = walkAnim;
 
   // ---------- Animaux ----------
   function animal(kind) {
@@ -314,20 +410,21 @@
   }
   // H : poste (x,z, cap en degrés), elev, échelle de l'avion, mode 'both' | 'off' (débarquement) | 'on' (embarquement)
   L.addBoarding = function (st, elev, scale, mode, n) {
-    const H = st.hdg * D2R, f = [Math.sin(H), -Math.cos(H)], l = [-Math.cos(H), -Math.sin(H)], sc = scale || 1;
+    const H = st.hdg * D2R, f = [Math.sin(H), -Math.cos(H)], l = [-Math.cos(H), -Math.sin(H)], sv = typeof scale === 'object' && scale ? scale : { x: scale || 1, y: scale || 1, z: scale || 1 }, sc = sv.z;
     const P0 = (a, b) => ({ x: st.x + f[0] * a + l[0] * b, z: st.z + f[1] * a + l[1] * b });
-    const door = P0(-11.5 * sc, 2.2 * sc), bot = P0(-11.5 * sc, 8.5), term = P0(38, 8.5);
-    door.y0 = elev; const g = stairs(door, bot, 3.0 * sc);
-    const B = { st, g, mode, people: [], path: [{ x: door.x, z: door.z, y: elev + 3.05 * sc }, { x: bot.x, z: bot.z, y: elev + 0.15 }, { x: term.x, z: term.z, y: elev + 0.15 }], done: 0, total: n || 26 };
+    // porte AVANT gauche : les passagers montent et descendent par l'avant de l'avion
+    const door = P0(14.7 * sc, 2.25 * sv.x), bot = P0(14.7 * sc, 8.8 + sv.x), term = P0(38, 8.8 + sv.x);
+    if (st.plane && st.plane.setDoor) st.plane.setDoor(1);
+    door.y0 = elev; const g = stairs(door, bot, 3.0 * sv.y);
+    const B = { st, g, mode, people: [], path: [{ x: door.x, z: door.z, y: elev + 3.05 * sv.y }, { x: bot.x, z: bot.z, y: elev + 0.15 }, { x: term.x, z: term.z, y: elev + 0.15 }], done: 0, total: n || 26 };
     for (let i = 0; i < Math.min(B.total, 26); i++) {
-      const p = person(false); scene.add(p);
+      const p = traveler(); scene.add(p);
       const out = mode === 'off' || (mode === 'both' && i % 2 === 0);
-      B.people.push({ m: p, out, f: -i * 0.05, sp: 0.022 + Math.random() * 0.01, bag: Math.random() < 0.6 });
-      if (Math.random() < 0.6) { const bag = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.22), S([0x1c1c1c, 0x2b4a8b, 0x8b2b2b, 0x6b5a3a][i % 4])); bag.position.set(0.3, 0.3, 0.1); p.add(bag); }
+      B.people.push({ m: p, out, f: -i * 0.05, sp: 0.022 + Math.random() * 0.01 });
     }
     L.boards.push(B); return B;
   };
-  L.removeBoarding = function (B) { if (!B) return; scene.remove(B.g); B.people.forEach(p => scene.remove(p.m)); L.boards.splice(L.boards.indexOf(B), 1); };
+  L.removeBoarding = function (B) { if (!B) return; if (B.st && B.st.plane && B.st.plane.setDoor) B.st.plane.setDoor(0); scene.remove(B.g); B.people.forEach(p => scene.remove(p.m)); L.boards.splice(L.boards.indexOf(B), 1); };
   function posOn(path, k) { // k ∈ [0,1] le long du trajet porte → bas de l'escalier → aérogare
     const L1 = Math.hypot(path[1].x - path[0].x, path[1].z - path[0].z) + 3, L2 = Math.hypot(path[2].x - path[1].x, path[2].z - path[1].z), T = L1 + L2, d = k * T;
     const [a, b, u] = d < L1 ? [path[0], path[1], d / L1] : [path[1], path[2], (d - L1) / L2];
@@ -340,8 +437,8 @@
       if (k >= 1) { if (B.mode === 'both') { p.f = -Math.random() * 0.4; k = 0; } else { p.m.visible = false; if (!p.done) { p.done = true; B.done++; } return; } }
       if (k < 0 || !vis) { p.m.visible = false; return; }
       p.m.visible = true; const q = posOn(B.path, p.out ? k : 1 - k);
-      p.m.position.set(q.x, q.y, q.z); p.m.rotation.y = q.dir + (p.out ? 0 : Math.PI);
-      const u = p.m.userData, sw = Math.sin(t * 6 + u.ph) * 0.5; u.legs[0].rotation.x = sw; u.legs[1].rotation.x = -sw; u.arms[0].rotation.x = -sw * 0.7; u.arms[1].rotation.x = sw * 0.7;
+      const bob = walkAnim(p.m, t, 6.5);
+      p.m.position.set(q.x, q.y + bob, q.z); p.m.rotation.y = q.dir + (p.out ? 0 : Math.PI);
     });
   }
   // ---------- Hélicoptères pilotables ----------
